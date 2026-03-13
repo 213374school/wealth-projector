@@ -1,0 +1,90 @@
+import type { Scenario } from "../types";
+
+export interface ValidationResult {
+  valid: boolean;
+  error?: string;
+}
+
+export function validateScenario(data: unknown): ValidationResult {
+  if (typeof data !== "object" || data === null) {
+    return { valid: false, error: "Data is not an object" };
+  }
+  const d = data as Record<string, unknown>;
+
+  const requiredStrings = ["id", "name", "createdAt", "updatedAt", "timelineStart", "timelineEnd", "currencyLocale", "currencySymbol"];
+  for (const key of requiredStrings) {
+    if (typeof d[key] !== "string") return { valid: false, error: `Missing or invalid field: ${key}` };
+  }
+
+  const requiredNumbers = ["inflationRate"];
+  for (const key of requiredNumbers) {
+    if (typeof d[key] !== "number") return { valid: false, error: `Missing or invalid field: ${key}` };
+  }
+
+  if (typeof d["inflationEnabled"] !== "boolean") {
+    return { valid: false, error: "Missing or invalid field: inflationEnabled" };
+  }
+
+  if (!isValidYYYYMM(d["timelineStart"] as string)) {
+    return { valid: false, error: "timelineStart must be YYYY-MM" };
+  }
+  if (!isValidYYYYMM(d["timelineEnd"] as string)) {
+    return { valid: false, error: "timelineEnd must be YYYY-MM" };
+  }
+
+  if (!Array.isArray(d["accounts"])) return { valid: false, error: "accounts must be an array" };
+  if (!Array.isArray(d["transfers"])) return { valid: false, error: "transfers must be an array" };
+
+  const accountIds = new Set<string>();
+  for (const acc of d["accounts"] as unknown[]) {
+    const r = validateAccount(acc);
+    if (!r.valid) return r;
+    accountIds.add((acc as Record<string, unknown>)["id"] as string);
+  }
+
+  for (const t of d["transfers"] as unknown[]) {
+    const r = validateTransfer(t, accountIds);
+    if (!r.valid) return r;
+  }
+
+  return { valid: true };
+}
+
+function validateAccount(data: unknown): ValidationResult {
+  if (typeof data !== "object" || data === null) return { valid: false, error: "Account is not an object" };
+  const d = data as Record<string, unknown>;
+  const required = ["id", "name", "color", "startDate"];
+  for (const k of required) {
+    if (typeof d[k] !== "string") return { valid: false, error: `Account missing field: ${k}` };
+  }
+  if (!isValidYYYYMM(d["startDate"] as string)) return { valid: false, error: "Account startDate must be YYYY-MM" };
+  if (typeof d["initialBalance"] !== "number") return { valid: false, error: "Account missing initialBalance" };
+  if (typeof d["growthRate"] !== "number") return { valid: false, error: "Account missing growthRate" };
+  return { valid: true };
+}
+
+function validateTransfer(data: unknown, accountIds: Set<string>): ValidationResult {
+  if (typeof data !== "object" || data === null) return { valid: false, error: "Transfer is not an object" };
+  const d = data as Record<string, unknown>;
+  if (typeof d["id"] !== "string") return { valid: false, error: "Transfer missing id" };
+  if (typeof d["sourceAccountId"] !== "string" || !accountIds.has(d["sourceAccountId"] as string)) {
+    return { valid: false, error: `Transfer references unknown sourceAccountId: ${d["sourceAccountId"]}` };
+  }
+  if (typeof d["targetAccountId"] !== "string" || !accountIds.has(d["targetAccountId"] as string)) {
+    return { valid: false, error: `Transfer references unknown targetAccountId: ${d["targetAccountId"]}` };
+  }
+  if (!isValidYYYYMM(d["startDate"] as string)) return { valid: false, error: "Transfer startDate must be YYYY-MM" };
+  if (d["endDate"] !== null && (typeof d["endDate"] !== "string" || !isValidYYYYMM(d["endDate"] as string))) {
+    return { valid: false, error: "Transfer endDate must be YYYY-MM or null" };
+  }
+  if (typeof d["amount"] !== "number") return { valid: false, error: "Transfer missing amount" };
+  if (typeof d["taxRate"] !== "number") return { valid: false, error: "Transfer missing taxRate" };
+  return { valid: true };
+}
+
+function isValidYYYYMM(s: string): boolean {
+  return /^\d{4}-\d{2}$/.test(s);
+}
+
+// Suppress unused import warning - Scenario type is used in validateScenario's return context
+export type { Scenario };

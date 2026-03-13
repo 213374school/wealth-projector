@@ -1,4 +1,4 @@
-import type { Transfer, Account, DateSnap } from "../types";
+import type { Transfer, Account, DateSnap, AccountDateSnap } from "../types";
 
 function resolveSnap(
   snap: DateSnap,
@@ -32,4 +32,14 @@ export function resolvedEndDate(transfer: Transfer, accounts: Account[]): string
 export const SNAP_LABELS: Record<DateSnap, string> = {
   "source-start": "Source account start",
   "target-start": "Target account start",
+};
+
+/** Returns the effective startDate for an account, respecting any snap. */
+export function resolvedAccountStartDate(account: Account, timelineStart: string): string {
+  if (account.startSnap === "timeline-start") return timelineStart;
+  return account.startDate;
+}
+
+export const ACCOUNT_SNAP_LABELS: Record<AccountDateSnap, string> = {
+  "timeline-start": "Timeline start",
 };

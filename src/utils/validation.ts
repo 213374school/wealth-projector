@@ -67,10 +67,10 @@ function validateTransfer(data: unknown, accountIds: Set<string>): ValidationRes
   if (typeof data !== "object" || data === null) return { valid: false, error: "Transfer is not an object" };
   const d = data as Record<string, unknown>;
   if (typeof d["id"] !== "string") return { valid: false, error: "Transfer missing id" };
-  if (typeof d["sourceAccountId"] !== "string" || !accountIds.has(d["sourceAccountId"] as string)) {
+  if (d["sourceAccountId"] !== null && (typeof d["sourceAccountId"] !== "string" || !accountIds.has(d["sourceAccountId"] as string))) {
     return { valid: false, error: `Transfer references unknown sourceAccountId: ${d["sourceAccountId"]}` };
   }
-  if (typeof d["targetAccountId"] !== "string" || !accountIds.has(d["targetAccountId"] as string)) {
+  if (d["targetAccountId"] !== null && (typeof d["targetAccountId"] !== "string" || !accountIds.has(d["targetAccountId"] as string))) {
     return { valid: false, error: `Transfer references unknown targetAccountId: ${d["targetAccountId"]}` };
   }
   if (!isValidYYYYMM(d["startDate"] as string)) return { valid: false, error: "Transfer startDate must be YYYY-MM" };

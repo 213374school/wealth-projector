@@ -338,11 +338,11 @@ function AddTransferModal({
   onClose,
 }: {
   accounts: Account[];
-  onConfirm: (srcId: string, tgtId: string) => void;
+  onConfirm: (srcId: string | null, tgtId: string | null) => void;
   onClose: () => void;
 }) {
-  const [srcId, setSrcId] = useState(accounts[0]?.id ?? "");
-  const [tgtId, setTgtId] = useState(accounts[0]?.id ?? "");
+  const [srcId, setSrcId] = useState<string>(accounts[0]?.id ?? "");
+  const [tgtId, setTgtId] = useState<string>(accounts[0]?.id ?? "");
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
@@ -359,6 +359,7 @@ function AddTransferModal({
             onChange={e => setSrcId(e.target.value)}
             className="input"
           >
+            <option value="">None (external / contribution)</option>
             {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         </div>
@@ -370,16 +371,21 @@ function AddTransferModal({
             onChange={e => setTgtId(e.target.value)}
             className="input"
           >
+            <option value="">None (external / consumption)</option>
             {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         </div>
 
         <p className="text-xs text-gray-400 dark:text-gray-500">
-          Source and target can be the same account (e.g. for a gains tax event).
+          Source and target can be the same account (e.g. for a gains tax event). Set one side to "None" for a contribution or consumption.
         </p>
 
         <div className="flex gap-2 pt-1">
-          <button onClick={() => onConfirm(srcId, tgtId)} className="btn-primary flex-1">
+          <button
+            onClick={() => onConfirm(srcId || null, tgtId || null)}
+            disabled={!srcId && !tgtId}
+            className="btn-primary flex-1 disabled:opacity-50"
+          >
             Create
           </button>
           <button onClick={onClose} className="btn-secondary flex-1">

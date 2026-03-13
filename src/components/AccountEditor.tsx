@@ -1,6 +1,7 @@
 import { useCallback } from "react";
-import type { Account } from "../types";
+import type { Account, AccountDateSnap } from "../types";
 import { useScenarioStore } from "../store/scenario";
+import { resolvedAccountStartDate, ACCOUNT_SNAP_LABELS } from "../utils/snapDates";
 
 const PERIODS = ["monthly", "quarterly", "half-yearly", "yearly"] as const;
 
@@ -13,6 +14,9 @@ export function AccountEditor({ account }: Props) {
   const deleteAccount = useScenarioStore(s => s.deleteAccount);
   const transfers = useScenarioStore(s =>
     s.activeScenarioId ? s.scenarios[s.activeScenarioId]?.transfers ?? [] : []
+  );
+  const timelineStart = useScenarioStore(s =>
+    s.activeScenarioId ? s.scenarios[s.activeScenarioId]?.timelineStart ?? "" : ""
   );
 
   const update = useCallback(<K extends keyof Account>(key: K, value: Account[K]) => {
@@ -55,14 +59,31 @@ export function AccountEditor({ account }: Props) {
         />
       </Field>
 
-      <Field label="Start Date">
-        <input
-          type="month"
-          value={account.startDate}
-          onChange={e => update("startDate", e.target.value)}
-          className="input"
-        />
-      </Field>
+      <div>
+        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Start Date</label>
+        <select
+          value={account.startSnap ?? ""}
+          onChange={e => update("startSnap", (e.target.value as AccountDateSnap) || null)}
+          className="input mb-1"
+        >
+          <option value="">Fixed date</option>
+          {(Object.keys(ACCOUNT_SNAP_LABELS) as AccountDateSnap[]).map(k => (
+            <option key={k} value={k}>{ACCOUNT_SNAP_LABELS[k]}</option>
+          ))}
+        </select>
+        {account.startSnap ? (
+          <p className="text-xs text-gray-400 dark:text-gray-500 pl-1">
+            Resolves to: <span className="font-medium text-gray-600 dark:text-gray-300">{resolvedAccountStartDate(account, timelineStart)}</span>
+          </p>
+        ) : (
+          <input
+            type="month"
+            value={account.startDate}
+            onChange={e => update("startDate", e.target.value)}
+            className="input"
+          />
+        )}
+      </div>
 
       <Field label="Initial Balance">
         <input

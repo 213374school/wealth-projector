@@ -27,7 +27,7 @@ interface ScenarioStore {
   updateAccount: (id: string, updates: Partial<Account>) => void;
   deleteAccount: (id: string) => void;
 
-  addTransfer: (sourceId: string, targetId: string) => void;
+  addTransfer: (sourceId: string | null, targetId: string | null) => void;
   updateTransfer: (id: string, updates: Partial<Transfer>) => void;
   deleteTransfer: (id: string) => void;
 
@@ -187,7 +187,7 @@ export const useScenarioStore = create<ScenarioStore>()(
         });
       },
 
-      addTransfer: (sourceId, targetId) => {
+      addTransfer: (sourceId: string | null, targetId: string | null) => {
         set(state => {
           if (!state.activeScenarioId) return state;
           const scenario = state.scenarios[state.activeScenarioId];

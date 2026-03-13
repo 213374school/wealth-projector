@@ -1,5 +1,5 @@
 import type { Scenario, Account, Transfer, SimulationResult, Period } from "../types";
-import { resolvedStartDate, resolvedEndDate } from "../utils/snapDates";
+import { resolvedStartDate, resolvedEndDate, resolvedAccountStartDate } from "../utils/snapDates";
 
 function monthsBetween(start: string, end: string): number {
   const [sy, sm] = start.split("-").map(Number);
@@ -53,7 +53,7 @@ export function runSimulation(scenario: Scenario): SimulationResult {
 
   // Initialize accounts that start at or before timelineStart
   for (const acc of accounts) {
-    if (acc.startDate <= timelineStart) {
+    if (resolvedAccountStartDate(acc, timelineStart) <= timelineStart) {
       balance[acc.id] = acc.initialBalance;
       principal[acc.id] = acc.initialBalance;
     }
@@ -64,7 +64,7 @@ export function runSimulation(scenario: Scenario): SimulationResult {
 
     // Initialize any accounts that start this month
     for (const acc of accounts) {
-      if (acc.startDate === M && !(acc.id in balance)) {
+      if (resolvedAccountStartDate(acc, timelineStart) === M && !(acc.id in balance)) {
         balance[acc.id] = acc.initialBalance;
         principal[acc.id] = acc.initialBalance;
       }
@@ -87,10 +87,10 @@ export function runSimulation(scenario: Scenario): SimulationResult {
 
     // Apply transfers
     for (const t of transfers) {
-      if (!isTransferActive(t, M, accounts)) continue;
+      if (!isTransferActive(t, M, accounts, timelineStart)) continue;
 
-      const srcBal = snapshot[t.sourceAccountId] ?? 0;
-      const srcPrincipal = principalSnapshot[t.sourceAccountId] ?? 0;
+      const srcBal = t.sourceAccountId ? (snapshot[t.sourceAccountId] ?? 0) : 0;
+      const srcPrincipal = t.sourceAccountId ? (principalSnapshot[t.sourceAccountId] ?? 0) : 0;
 
       // Resolve amount
       let resolvedAmount: number;
@@ -120,9 +120,11 @@ export function runSimulation(scenario: Scenario): SimulationResult {
 
       const netToTarget = resolvedAmount - taxCost;
 
-      const isSelf = t.sourceAccountId === t.targetAccountId;
-
-      if (isSelf && t.amountType === "gains-only") {
+      if (
+        t.sourceAccountId !== null &&
+        t.sourceAccountId === t.targetAccountId &&
+        t.amountType === "gains-only"
+      ) {
         // Special case: self-transfer gains-only — just deduct tax from balance, reset principal
         balanceDelta[t.sourceAccountId] = (balanceDelta[t.sourceAccountId] ?? 0) - taxCost;
         // principal will be set to balance after commit — track via special flag
@@ -130,20 +132,22 @@ export function runSimulation(scenario: Scenario): SimulationResult {
         // For now store as a special signal: set principalDelta to NaN to indicate "set to balance"
         principalDelta[t.sourceAccountId] = NaN; // sentinel: reset to balance
       } else {
-        // Deduct from source
-        balanceDelta[t.sourceAccountId] = (balanceDelta[t.sourceAccountId] ?? 0) - resolvedAmount;
+        // Deduct from source (skip if source is null — contribution from outside)
+        if (t.sourceAccountId !== null) {
+          balanceDelta[t.sourceAccountId] = (balanceDelta[t.sourceAccountId] ?? 0) - resolvedAmount;
 
-        // Update principal on source (proportional debit)
-        if (snapshot[t.sourceAccountId] !== 0) {
-          const principalFraction = srcPrincipal / snapshot[t.sourceAccountId];
-          const principalDebit = resolvedAmount * principalFraction;
-          if (!isNaN(principalDelta[t.sourceAccountId])) {
-            principalDelta[t.sourceAccountId] = (principalDelta[t.sourceAccountId] ?? 0) - principalDebit;
+          // Update principal on source (proportional debit)
+          if (snapshot[t.sourceAccountId] !== 0) {
+            const principalFraction = srcPrincipal / snapshot[t.sourceAccountId];
+            const principalDebit = resolvedAmount * principalFraction;
+            if (!isNaN(principalDelta[t.sourceAccountId])) {
+              principalDelta[t.sourceAccountId] = (principalDelta[t.sourceAccountId] ?? 0) - principalDebit;
+            }
           }
         }
 
-        // Credit to target
-        if (t.targetAccountId in balanceDelta) {
+        // Credit to target (skip if target is null — pure consumption)
+        if (t.targetAccountId !== null && t.targetAccountId in balanceDelta) {
           balanceDelta[t.targetAccountId] = (balanceDelta[t.targetAccountId] ?? 0) + netToTarget;
           if (!isNaN(principalDelta[t.targetAccountId])) {
             principalDelta[t.targetAccountId] = (principalDelta[t.targetAccountId] ?? 0) + netToTarget;
@@ -156,7 +160,7 @@ export function runSimulation(scenario: Scenario): SimulationResult {
     for (const acc of accounts) {
       if (!(acc.id in balance)) continue;
       const N = periodToMonths(acc.growthPeriod);
-      const monthsFromStart = monthsBetween(acc.startDate, M);
+      const monthsFromStart = monthsBetween(resolvedAccountStartDate(acc, timelineStart), M);
       if (monthsFromStart >= 0 && monthsFromStart % N === 0) {
         const rate = periodRate(acc.growthRate, N);
         const delta = snapshot[acc.id] * rate;
@@ -200,7 +204,7 @@ export function runSimulation(scenario: Scenario): SimulationResult {
   return { months, balances, principals };
 }
 
-function isTransferActive(t: Transfer, M: string, accounts: Account[]): boolean {
+function isTransferActive(t: Transfer, M: string, accounts: Account[], timelineStart: string): boolean {
   const startDate = resolvedStartDate(t, accounts);
   const endDate = resolvedEndDate(t, accounts);
 
@@ -215,12 +219,13 @@ function isTransferActive(t: Transfer, M: string, accounts: Account[]): boolean 
     if (diff % N !== 0) return false;
   }
 
-  // Check source and target accounts have started
-  const srcAcc = accounts.find(a => a.id === t.sourceAccountId);
-  const tgtAcc = accounts.find(a => a.id === t.targetAccountId);
-  if (!srcAcc || !tgtAcc) return false;
-  if (M < srcAcc.startDate) return false;
-  if (M < tgtAcc.startDate) return false;
+  // Check source and target accounts have started (null = external, always valid)
+  const srcAcc = t.sourceAccountId ? accounts.find(a => a.id === t.sourceAccountId) : null;
+  const tgtAcc = t.targetAccountId ? accounts.find(a => a.id === t.targetAccountId) : null;
+  if (t.sourceAccountId && !srcAcc) return false;
+  if (t.targetAccountId && !tgtAcc) return false;
+  if (srcAcc && M < resolvedAccountStartDate(srcAcc, timelineStart)) return false;
+  if (tgtAcc && M < resolvedAccountStartDate(tgtAcc, timelineStart)) return false;
 
   return true;
 }

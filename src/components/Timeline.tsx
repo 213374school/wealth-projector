@@ -1,7 +1,7 @@
 import { useRef, useCallback } from "react";
 import type { Transfer, Scenario } from "../types";
 import { useScenarioStore } from "../store/scenario";
-import { resolvedStartDate, resolvedEndDate } from "../utils/snapDates";
+import { resolvedStartDate, resolvedEndDate, resolvedAccountStartDate } from "../utils/snapDates";
 
 interface TimelineProps {
   scenario: Scenario;
@@ -46,12 +46,21 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     }
   }
 
+  // Contributions (null source) appear first, before all accounts
+  for (const t of scenario.transfers) {
+    if (t.sourceAccountId !== null) continue;
+    const tStart = resolvedStartDate(t, scenario.accounts);
+    const tEnd = resolvedEndDate(t, scenario.accounts) ?? scenario.timelineEnd;
+    lanes.push({ id: t.id, type: "transfer", start: tStart, end: tEnd, lane: assignLane(tStart, tEnd) });
+  }
+
   // For each account, assign its lane then immediately assign its transfers below it
   const accountLaneMap: Record<string, number> = {};
   for (const acc of scenario.accounts) {
-    const lane = assignLane(acc.startDate, scenario.timelineEnd);
+    const accStart = resolvedAccountStartDate(acc, scenario.timelineStart);
+    const lane = assignLane(accStart, scenario.timelineEnd);
     accountLaneMap[acc.id] = lane;
-    lanes.push({ id: acc.id, type: "account", start: acc.startDate, end: scenario.timelineEnd, lane });
+    lanes.push({ id: acc.id, type: "account", start: accStart, end: scenario.timelineEnd, lane });
 
     for (const t of scenario.transfers) {
       if (t.sourceAccountId !== acc.id) continue;
@@ -60,15 +69,6 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
       const tLane = assignLane(tStart, tEnd, lane + 1);
       lanes.push({ id: t.id, type: "transfer", start: tStart, end: tEnd, lane: tLane });
     }
-  }
-
-  // Any transfers whose source account doesn't exist (shouldn't happen, but be safe)
-  const assigned = new Set(lanes.map(l => l.id));
-  for (const t of scenario.transfers) {
-    if (assigned.has(t.id)) continue;
-    const tStart = resolvedStartDate(t, scenario.accounts);
-    const tEnd = resolvedEndDate(t, scenario.accounts) ?? scenario.timelineEnd;
-    lanes.push({ id: t.id, type: "transfer", start: tStart, end: tEnd, lane: assignLane(tStart, tEnd) });
   }
 
   const maxLane = lanes.reduce((m, l) => Math.max(m, l.lane), 0);
@@ -192,11 +192,11 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         const top = lane * laneHeight + 2;
 
         // Snap state — locked handles show a different cursor
-        const startSnapped = type === "transfer" && !!transfer?.startSnap;
+        const startSnapped = type === "transfer" ? !!transfer?.startSnap : !!acc?.startSnap;
         const endSnapped = type === "transfer" && !!transfer?.endSnap;
 
         // For drag: pass literal dates (not resolved) so the handler writes back correctly
-        const dragStart = transfer ? transfer.startDate : start;
+        const dragStart = transfer ? transfer.startDate : acc!.startDate;
         const dragEnd = transfer ? transfer.endDate : null;
 
         const isTransfer = type === "transfer" && !!transfer;

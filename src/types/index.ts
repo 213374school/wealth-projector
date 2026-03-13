@@ -4,11 +4,14 @@ export type AmountType = "fixed" | "percent-balance" | "gains-only";
 
 export type DateSnap = "source-start" | "target-start";
 
+export type AccountDateSnap = "timeline-start";
+
 export interface Account {
   id: string;
   name: string;
   color: string;
-  startDate: string; // YYYY-MM
+  startDate: string; // YYYY-MM — used when startSnap is null
+  startSnap?: AccountDateSnap | null;
   initialBalance: number;
   growthRate: number;
   growthPeriod: Period;
@@ -18,8 +21,8 @@ export interface Account {
 export interface Transfer {
   id: string;
   name: string;
-  sourceAccountId: string;
-  targetAccountId: string;
+  sourceAccountId: string | null;
+  targetAccountId: string | null;
   startDate: string;        // YYYY-MM — used when startSnap is null
   startSnap?: DateSnap | null;
   endDate: string | null;   // YYYY-MM — used when endSnap is null

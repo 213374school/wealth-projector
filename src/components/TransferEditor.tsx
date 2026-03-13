@@ -20,6 +20,8 @@ export function TransferEditor({ transfer, accounts }: Props) {
   }, [transfer.id, updateTransfer]);
 
   const isGainsOnly = transfer.amountType === "gains-only";
+  const hasSource = transfer.sourceAccountId !== null;
+  const hasTarget = transfer.targetAccountId !== null;
 
   const handleAmountTypeChange = (val: Transfer["amountType"]) => {
     const updates: Partial<Transfer> = { amountType: val };
@@ -42,13 +44,28 @@ export function TransferEditor({ transfer, accounts }: Props) {
       </Field>
 
       <Field label="Source Account">
-        <select value={transfer.sourceAccountId} onChange={e => update("sourceAccountId", e.target.value)} className="input">
+        <select
+          value={transfer.sourceAccountId ?? ""}
+          onChange={e => update("sourceAccountId", e.target.value || null)}
+          className="input"
+        >
+          <option value="">None (external / contribution)</option>
           {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
       </Field>
 
       <Field label="Target Account">
-        <select value={transfer.targetAccountId} onChange={e => update("targetAccountId", e.target.value)} className="input">
+        <select
+          value={transfer.targetAccountId ?? ""}
+          onChange={e => {
+            const val = e.target.value || null;
+            const updates: Partial<Transfer> = { targetAccountId: val };
+            if (val === null) { updates.taxRate = 0; updates.taxBasis = "full"; }
+            updateTransfer(transfer.id, updates);
+          }}
+          className="input"
+        >
+          <option value="">None (external / consumption)</option>
           {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
       </Field>
@@ -89,7 +106,9 @@ export function TransferEditor({ transfer, accounts }: Props) {
 
       <Field label="Amount Type">
         <select value={transfer.amountType} onChange={e => handleAmountTypeChange(e.target.value as Transfer["amountType"])} className="input">
-          {AMOUNT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          {AMOUNT_TYPES.map(t => (
+            <option key={t} value={t} disabled={!hasSource && t !== "fixed"}>{t}</option>
+          ))}
         </select>
       </Field>
 
@@ -108,29 +127,33 @@ export function TransferEditor({ transfer, accounts }: Props) {
         </Field>
       )}
 
-      <Field label="Tax Rate (%)">
-        <input
-          type="number"
-          value={(transfer.taxRate * 100).toFixed(1)}
-          step="0.5"
-          min="0"
-          max="100"
-          onChange={e => update("taxRate", (parseFloat(e.target.value) || 0) / 100)}
-          className="input"
-        />
-      </Field>
+      {hasTarget && (
+        <>
+          <Field label="Tax Rate (%)">
+            <input
+              type="number"
+              value={(transfer.taxRate * 100).toFixed(1)}
+              step="0.5"
+              min="0"
+              max="100"
+              onChange={e => update("taxRate", (parseFloat(e.target.value) || 0) / 100)}
+              className="input"
+            />
+          </Field>
 
-      <Field label="Tax Basis">
-        <select
-          value={transfer.taxBasis}
-          disabled={isGainsOnly}
-          onChange={e => update("taxBasis", e.target.value as Transfer["taxBasis"])}
-          className="input disabled:opacity-50"
-        >
-          <option value="full">Full amount</option>
-          <option value="gains-fraction">Gains fraction only</option>
-        </select>
-      </Field>
+          <Field label="Tax Basis">
+            <select
+              value={transfer.taxBasis}
+              disabled={isGainsOnly}
+              onChange={e => update("taxBasis", e.target.value as Transfer["taxBasis"])}
+              className="input disabled:opacity-50"
+            >
+              <option value="full">Full amount</option>
+              <option value="gains-fraction">Gains fraction only</option>
+            </select>
+          </Field>
+        </>
+      )}
 
       <Field label="Notes">
         <textarea value={transfer.notes ?? ""} onChange={e => update("notes", e.target.value)} rows={2} className="input" />

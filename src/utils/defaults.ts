@@ -38,7 +38,7 @@ export function makeDefaultAccount(existingCount: number = 0): Account {
   };
 }
 
-export function makeDefaultTransfer(sourceId: string, targetId: string): Transfer {
+export function makeDefaultTransfer(sourceId: string | null, targetId: string | null): Transfer {
   return {
     id: generateId(),
     name: "New Transfer",

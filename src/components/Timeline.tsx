@@ -31,7 +31,6 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
   const updateAccount = useScenarioStore(s => s.updateAccount);
   const updateTransfer = useScenarioStore(s => s.updateTransfer);
 
-  const totalMonths = monthsBetween(scenario.timelineStart, scenario.timelineEnd) + 1;
   const viewMonths = viewportEnd - viewportStart + 1;
 
   // Assign lanes to avoid overlap, with an optional minimum lane
@@ -148,33 +147,6 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
   return (
     <div ref={containerRef} className="relative w-full select-none">
-      {/* Sticky ruler */}
-      <div className="sticky top-0 z-10 h-8 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-        {todayPct !== null && (
-          <div
-            className="absolute top-0 bottom-0 w-px bg-amber-400 opacity-70 pointer-events-none"
-            style={{ left: `${todayPct}%` }}
-          />
-        )}
-        {Array.from({ length: Math.ceil(totalMonths / 12) }, (_, i) => {
-          const year = parseInt(scenario.timelineStart.split("-")[0]) + i;
-          const month = `${year}-01`;
-          const monthIdx = monthsBetween(scenario.timelineStart, month);
-          const viewIdx = monthIdx - viewportStart;
-          if (viewIdx < 0 || viewIdx > viewMonths) return null;
-          const pct = (viewIdx / (viewMonths - 1)) * 100;
-          return (
-            <div
-              key={year}
-              className="absolute top-0 h-full flex items-center"
-              style={{ left: `${pct}%`, transform: "translateX(-50%)" }}
-            >
-              <span className="text-xs text-gray-500">{year}</span>
-            </div>
-          );
-        })}
-      </div>
-
       {/* Bars */}
       <div className="relative overflow-x-hidden" style={{ height: barsHeight }}>
         {todayPct !== null && (

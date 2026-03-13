@@ -172,7 +172,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           const pct = (viewIdx / (viewMonths - 1)) * 100;
           return (
             <div
-              className="absolute top-0 bottom-0 opacity-75 pointer-events-none"
+              className="absolute top-0 bottom-0 opacity-50 pointer-events-none z-10"
               style={{ left: `${pct}%`, borderLeft: "1px dashed currentColor" }}
             />
           );

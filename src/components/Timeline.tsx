@@ -72,8 +72,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
   const maxLane = lanes.reduce((m, l) => Math.max(m, l.lane), 0);
   const laneHeight = 24;
-  const rulerHeight = 30;
-  const totalHeight = rulerHeight + (maxLane + 1) * laneHeight + 8;
+  const barsHeight = (maxLane + 1) * laneHeight + 8;
 
   const handleDrag = useCallback((
     e: React.MouseEvent,
@@ -138,10 +137,25 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     ...scenario.transfers.map(t => [t.id, t.name]),
   ]);
 
+  const todayPct = (() => {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const monthIdx = monthsBetween(scenario.timelineStart, todayStr);
+    const viewIdx = monthIdx - viewportStart;
+    if (viewIdx < 0 || viewIdx > viewMonths) return null;
+    return (viewIdx / (viewMonths - 1)) * 100;
+  })();
+
   return (
-    <div ref={containerRef} className="relative w-full overflow-hidden select-none" style={{ height: totalHeight }}>
-      {/* Ruler */}
-      <div className="absolute top-0 left-0 right-0 h-8 border-b border-gray-200 dark:border-gray-700">
+    <div ref={containerRef} className="relative w-full select-none">
+      {/* Sticky ruler */}
+      <div className="sticky top-0 z-10 h-8 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+        {todayPct !== null && (
+          <div
+            className="absolute top-0 bottom-0 w-px bg-amber-400 opacity-70 pointer-events-none"
+            style={{ left: `${todayPct}%` }}
+          />
+        )}
         {Array.from({ length: Math.ceil(totalMonths / 12) }, (_, i) => {
           const year = parseInt(scenario.timelineStart.split("-")[0]) + i;
           const month = `${year}-01`;
@@ -161,23 +175,14 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         })}
       </div>
 
-      {/* Today marker */}
-      {(() => {
-        const now = new Date();
-        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-        const monthIdx = monthsBetween(scenario.timelineStart, todayStr);
-        const viewIdx = monthIdx - viewportStart;
-        if (viewIdx < 0 || viewIdx > viewMonths) return null;
-        const pct = (viewIdx / (viewMonths - 1)) * 100;
-        return (
+      {/* Bars */}
+      <div className="relative overflow-x-hidden" style={{ height: barsHeight }}>
+        {todayPct !== null && (
           <div
             className="absolute top-0 bottom-0 w-px bg-amber-400 opacity-70 pointer-events-none"
-            style={{ left: `${pct}%` }}
+            style={{ left: `${todayPct}%` }}
           />
-        );
-      })()}
-
-      {/* Bars */}
+        )}
       {lanes.map(({ id, type, start, end, lane }) => {
         const startIdx = Math.max(0, monthsBetween(scenario.timelineStart, start) - viewportStart);
         const endIdx = Math.min(viewMonths - 1, monthsBetween(scenario.timelineStart, end) - viewportStart);
@@ -190,7 +195,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         const isOneTime = (transfer as Transfer | undefined)?.isOneTime ?? false;
 
         const isSelected = id === selectedItemId;
-        const top = rulerHeight + lane * laneHeight + 2;
+        const top = lane * laneHeight + 2;
 
         // Snap state — locked handles show a different cursor
         const startSnapped = type === "transfer" && !!transfer?.startSnap;
@@ -244,6 +249,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

@@ -285,7 +285,7 @@ export default function App() {
           {/* Timeline */}
           <div
             className="flex-shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 py-2"
-            style={{ minHeight: 80, maxHeight: 200, overflowY: "auto", paddingLeft: CHART_MARGIN.left + 8, paddingRight: CHART_MARGIN.right + 8 }}
+            style={{ minHeight: 80, maxHeight: "35vh", overflowY: "auto", paddingLeft: CHART_MARGIN.left + 8, paddingRight: CHART_MARGIN.right + 8 }}
           >
             <Timeline
               scenario={scenario}

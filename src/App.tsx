@@ -43,6 +43,7 @@ export default function App() {
   const [viewportStart, setViewportStart] = useState(0);
   const [viewportEnd, setViewportEnd] = useState(0);
   const chartAreaRef = useRef<HTMLDivElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
   // Refs so event handlers always see current values without being re-attached
   const vpRef = useRef({ start: 0, end: 0, total: 1 });
   const panAccRef = useRef(0);      // fractional month accumulator for smooth panning
@@ -113,6 +114,8 @@ export default function App() {
     if (!el) return;
 
     const onWheel = (e: WheelEvent) => {
+      // Let the timeline scroll natively
+      if (timelineRef.current?.contains(e.target as Node)) return;
       e.preventDefault();
       const { start, end, total } = vpRef.current;
       const viewWidth = end - start;
@@ -284,6 +287,7 @@ export default function App() {
 
           {/* Timeline */}
           <div
+            ref={timelineRef}
             className="flex-shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 py-2"
             style={{ minHeight: 80, maxHeight: "35vh", overflowY: "auto", paddingLeft: CHART_MARGIN.left + 8, paddingRight: CHART_MARGIN.right + 8 }}
           >

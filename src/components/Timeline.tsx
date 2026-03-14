@@ -54,6 +54,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
   }
 
   let nextLane = 0;
+  const groupGap = 10 / 24; // ~10px visual gap between account groups
 
   // Contributions (null source) — own isolated group at the top
   const contribGroup: LaneEntry[] = [];
@@ -65,7 +66,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     contribGroup.push({ start: tStart, end: tEnd, lane: localLane });
     lanes.push({ id: t.id, type: "transfer", start: tStart, end: tEnd, lane: nextLane + localLane });
   }
-  if (contribGroup.length > 0) nextLane += Math.max(...contribGroup.map(l => l.lane)) + 1;
+  if (contribGroup.length > 0) nextLane += Math.max(...contribGroup.map(l => l.lane)) + 1 + groupGap;
 
   // Each account gets a dedicated lane; its transfers collapse within their own group below it
   const accountLaneMap: Record<string, number> = {};
@@ -84,7 +85,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
       lanes.push({ id: t.id, type: "transfer", start: tStart, end: tEnd, lane: nextLane + 1 + localLane });
     }
 
-    nextLane += 1 + (transferGroup.length > 0 ? Math.max(...transferGroup.map(l => l.lane)) + 1 : 0);
+    nextLane += 1 + (transferGroup.length > 0 ? Math.max(...transferGroup.map(l => l.lane)) + 1 : 0) + groupGap;
   }
 
   const maxLane = lanes.reduce((m, l) => Math.max(m, l.lane), 0);

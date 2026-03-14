@@ -633,10 +633,10 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
                 </>
               )}
               {!isOneTime && widthPct > 5 && (
-                <span className={`text-xs text-white truncate pointer-events-none ${!isTransfer ? "font-bold" : ""}`} style={{ position: "relative", zIndex: 1 }}>{nameMap[id]}</span>
+                <span className={`text-xs text-white truncate px-1 pointer-events-none ${!isTransfer ? "font-bold" : ""}`} style={{ position: "relative", zIndex: 1 }}>{nameMap[id]}</span>
               )}
               {isTransfer && !isOneTime && widthPct > 5 && tgtName && (
-                <span className="absolute right-0 text-xs text-white pointer-events-none" style={{ zIndex: 1 }}>{tgtName}</span>
+                <span className="absolute right-1 text-xs text-white pointer-events-none" style={{ zIndex: 1 }}>{tgtName}</span>
               )}
               {/* Handles */}
               {!isOneTime && (

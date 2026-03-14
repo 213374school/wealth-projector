@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { Scenario, Account, Transfer } from "../types";
 import { makeDefaultScenario, generateId, currentMonth } from "../utils/defaults";
 import { runSimulation } from "../engine/simulate";
+import { resolvedAccountStartDate } from "../utils/snapDates";
 import type { SimulationResult } from "../types";
 
 interface ScenarioStore {
@@ -158,9 +159,25 @@ export const useScenarioStore = create<ScenarioStore>()(
           if (!state.activeScenarioId) return state;
           const scenario = state.scenarios[state.activeScenarioId];
           const accounts = scenario.accounts.map(a => a.id === id ? { ...a, ...updates } : a);
+
+          // Clamp literal transfer dates to their accounts' start ranges
+          const transfers = scenario.transfers.map(t => {
+            if (t.sourceAccountId !== id && t.targetAccountId !== id) return t;
+            if (t.startSnap) return t;
+            const srcAcc = t.sourceAccountId ? accounts.find(a => a.id === t.sourceAccountId) : null;
+            const tgtAcc = t.targetAccountId ? accounts.find(a => a.id === t.targetAccountId) : null;
+            const candidates = [srcAcc, tgtAcc].filter(Boolean).map(a => resolvedAccountStartDate(a!, scenario.timelineStart));
+            const minStart = candidates.reduce((a, b) => a > b ? a : b, scenario.timelineStart);
+            const clampedStart = t.startDate < minStart ? minStart : t.startDate;
+            const clampedEnd = (t.endDate && !t.endSnap && t.endDate < minStart) ? minStart : t.endDate;
+            return (clampedStart !== t.startDate || clampedEnd !== t.endDate)
+              ? { ...t, startDate: clampedStart, endDate: clampedEnd }
+              : t;
+          });
+
           const scenarios = {
             ...state.scenarios,
-            [state.activeScenarioId]: { ...scenario, accounts, updatedAt: currentMonth() },
+            [state.activeScenarioId]: { ...scenario, accounts, transfers, updatedAt: currentMonth() },
           };
           return { scenarios, simulationResult: recompute(scenarios, state.activeScenarioId) };
         });

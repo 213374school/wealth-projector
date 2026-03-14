@@ -101,6 +101,23 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     const containerWidth = container.clientWidth;
     const startX = e.clientX;
 
+    // For transfers, compute the earliest allowed start date from source/target accounts
+    const transferMinStart = (() => {
+      if (type !== "transfer") return scenario.timelineStart;
+      const t = scenario.transfers.find(t => t.id === id);
+      if (!t) return scenario.timelineStart;
+      const dates: string[] = [];
+      if (t.sourceAccountId) {
+        const a = scenario.accounts.find(a => a.id === t.sourceAccountId);
+        if (a) dates.push(resolvedAccountStartDate(a, scenario.timelineStart));
+      }
+      if (t.targetAccountId) {
+        const a = scenario.accounts.find(a => a.id === t.targetAccountId);
+        if (a) dates.push(resolvedAccountStartDate(a, scenario.timelineStart));
+      }
+      return dates.reduce((a, b) => a > b ? a : b, scenario.timelineStart);
+    })();
+
     const onMouseMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
       const monthDelta = Math.round((dx / containerWidth) * viewMonths);
@@ -111,7 +128,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
       if (part === "left") {
         newStart = addMonths(originalStart, monthDelta);
         if (newStart > (newEnd ?? scenario.timelineEnd)) newStart = newEnd ?? scenario.timelineEnd;
-        if (newStart < scenario.timelineStart) newStart = scenario.timelineStart;
+        if (newStart < transferMinStart) newStart = transferMinStart;
       } else if (part === "right" && newEnd !== null) {
         newEnd = addMonths(originalEnd!, monthDelta);
         if (newEnd < newStart) newEnd = newStart;
@@ -119,9 +136,9 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
       } else if (part === "body") {
         newStart = addMonths(originalStart, monthDelta);
         if (newEnd !== null) newEnd = addMonths(originalEnd!, monthDelta);
-        if (newStart < scenario.timelineStart) {
-          const shift = monthsBetween(newStart, scenario.timelineStart);
-          newStart = scenario.timelineStart;
+        if (newStart < transferMinStart) {
+          const shift = monthsBetween(newStart, transferMinStart);
+          newStart = transferMinStart;
           if (newEnd !== null) newEnd = addMonths(newEnd, shift);
         }
       }

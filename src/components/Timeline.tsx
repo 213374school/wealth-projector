@@ -34,6 +34,7 @@ type DragTarget =
 
 export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd, onSelectItem, hoveredIdx, onHoverIdx }: TimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const isDraggingAnchorRef = useRef(false);
   const applyDragUpdate = useScenarioStore(s => s.applyDragUpdate);
   const addAnchor = useScenarioStore(s => s.addAnchor);
   const updateAnchor = useScenarioStore(s => s.updateAnchor);
@@ -99,6 +100,8 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     e.stopPropagation();
     const container = containerRef.current;
     if (!container) return;
+    isDraggingAnchorRef.current = true;
+    onHoverIdx(null);
     const containerWidth = container.clientWidth;
     const startX = e.clientX;
     const originalDate = anchor.date;
@@ -154,6 +157,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     const onMouseUp = () => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      isDraggingAnchorRef.current = false;
       clearAnchorHighlight();
 
       const mergeTarget = mergeTargetRef.current;
@@ -170,7 +174,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
-  }, [viewMonths, scenario, applyDragUpdate, anchors]);
+  }, [viewMonths, scenario, applyDragUpdate, anchors, onHoverIdx]);
 
   const handleDrag = useCallback((
     e: React.MouseEvent,
@@ -497,6 +501,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         className="relative"
         style={{ height: barsHeight }}
         onMouseMove={e => {
+          if (isDraggingAnchorRef.current) return;
           const rect = e.currentTarget.getBoundingClientRect();
           const viewIdx = Math.round(((e.clientX - rect.left) / rect.width) * (viewMonths - 1));
           onHoverIdx(Math.max(0, Math.min(viewMonths - 1, viewIdx)) + viewportStart);

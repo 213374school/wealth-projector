@@ -198,6 +198,18 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
         .text("Today");
     }
 
+    // Anchor lines (non-fixed only)
+    for (const anchor of (scenario.anchors ?? []).filter(a => !a.fixed)) {
+      if (!months.includes(anchor.date)) continue;
+      const ax = xScale(anchor.date) ?? 0;
+      g.append("line")
+        .attr("x1", ax).attr("x2", ax)
+        .attr("y1", 0).attr("y2", height)
+        .attr("stroke", "rgba(99,202,183,0.65)")
+        .attr("stroke-width", 1)
+        .attr("stroke-dasharray", "4,2");
+    }
+
     // X axis — show year labels
     const yearMonths = months.filter(m => m.endsWith("-01"));
     const xAxisTicks = g.append("g")

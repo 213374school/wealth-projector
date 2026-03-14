@@ -1,5 +1,4 @@
 import type { Scenario, TimeAnchor, ItemEdge, EdgeId } from "../types";
-import { resolvedStartDate, resolvedEndDate, resolvedAccountStartDate } from "./snapDates";
 
 export function monthsBetween(a: string, b: string): number {
   const [ay, am] = a.split("-").map(Number);
@@ -19,12 +18,12 @@ export function addMonths(date: string, n: number): string {
 export function resolveEdgeDate(scenario: Scenario, itemId: string, edge: EdgeId): string {
   const acc = scenario.accounts.find(a => a.id === itemId);
   if (acc) {
-    return edge === "start" ? resolvedAccountStartDate(acc, scenario.timelineStart) : scenario.timelineEnd;
+    return edge === "start" ? acc.startDate : scenario.timelineEnd;
   }
   const t = scenario.transfers.find(t => t.id === itemId);
   if (!t) return scenario.timelineStart;
-  if (edge === "start") return resolvedStartDate(t, scenario.accounts);
-  return resolvedEndDate(t, scenario.accounts) ?? scenario.timelineEnd;
+  if (edge === "start") return t.startDate;
+  return t.endDate ?? scenario.timelineEnd;
 }
 
 /** Returns minimum allowed start for an item (account or transfer). */
@@ -36,11 +35,11 @@ export function getItemMinStart(scenario: Scenario, itemId: string): string {
   const dates: string[] = [];
   if (t.sourceAccountId) {
     const a = scenario.accounts.find(a => a.id === t.sourceAccountId);
-    if (a) dates.push(resolvedAccountStartDate(a, scenario.timelineStart));
+    if (a) dates.push(a.startDate);
   }
   if (t.targetAccountId) {
     const a = scenario.accounts.find(a => a.id === t.targetAccountId);
-    if (a) dates.push(resolvedAccountStartDate(a, scenario.timelineStart));
+    if (a) dates.push(a.startDate);
   }
   return dates.reduce((a, b) => a > b ? a : b, scenario.timelineStart);
 }

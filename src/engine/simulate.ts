@@ -1,5 +1,4 @@
 import type { Scenario, Account, Transfer, SimulationResult, Period } from "../types";
-import { resolvedStartDate, resolvedEndDate, resolvedAccountStartDate } from "../utils/snapDates";
 
 function monthsBetween(start: string, end: string): number {
   const [sy, sm] = start.split("-").map(Number);
@@ -53,7 +52,7 @@ export function runSimulation(scenario: Scenario): SimulationResult {
 
   // Initialize accounts that start at or before timelineStart
   for (const acc of accounts) {
-    if (resolvedAccountStartDate(acc, timelineStart) <= timelineStart) {
+    if (acc.startDate <= timelineStart) {
       balance[acc.id] = acc.initialBalance;
       principal[acc.id] = acc.initialBalance;
     }
@@ -64,7 +63,7 @@ export function runSimulation(scenario: Scenario): SimulationResult {
 
     // Initialize any accounts that start this month
     for (const acc of accounts) {
-      if (resolvedAccountStartDate(acc, timelineStart) === M && !(acc.id in balance)) {
+      if (acc.startDate === M && !(acc.id in balance)) {
         balance[acc.id] = acc.initialBalance;
         principal[acc.id] = acc.initialBalance;
       }
@@ -160,7 +159,7 @@ export function runSimulation(scenario: Scenario): SimulationResult {
     for (const acc of accounts) {
       if (!(acc.id in balance)) continue;
       const N = periodToMonths(acc.growthPeriod);
-      const monthsFromStart = monthsBetween(resolvedAccountStartDate(acc, timelineStart), M);
+      const monthsFromStart = monthsBetween(acc.startDate, M);
       if (monthsFromStart >= 0 && monthsFromStart % N === 0) {
         const rate = periodRate(acc.growthRate, N);
         const delta = snapshot[acc.id] * rate;
@@ -205,8 +204,8 @@ export function runSimulation(scenario: Scenario): SimulationResult {
 }
 
 function isTransferActive(t: Transfer, M: string, accounts: Account[], timelineStart: string): boolean {
-  const startDate = resolvedStartDate(t, accounts);
-  const endDate = resolvedEndDate(t, accounts);
+  const startDate = t.startDate;
+  const endDate = t.endDate;
 
   if (M < startDate) return false;
   if (endDate !== null && M > endDate) return false;
@@ -224,8 +223,8 @@ function isTransferActive(t: Transfer, M: string, accounts: Account[], timelineS
   const tgtAcc = t.targetAccountId ? accounts.find(a => a.id === t.targetAccountId) : null;
   if (t.sourceAccountId && !srcAcc) return false;
   if (t.targetAccountId && !tgtAcc) return false;
-  if (srcAcc && M < resolvedAccountStartDate(srcAcc, timelineStart)) return false;
-  if (tgtAcc && M < resolvedAccountStartDate(tgtAcc, timelineStart)) return false;
+  if (srcAcc && M < srcAcc.startDate) return false;
+  if (tgtAcc && M < tgtAcc.startDate) return false;
 
   return true;
 }

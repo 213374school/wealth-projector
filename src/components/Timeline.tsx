@@ -1,7 +1,6 @@
 import { useRef, useCallback } from "react";
 import type { Transfer, Scenario, TimeAnchor } from "../types";
 import { useScenarioStore, FIXED_END_ID } from "../store/scenario";
-import { resolvedStartDate, resolvedEndDate, resolvedAccountStartDate } from "../utils/snapDates";
 import {
   findAnchorForEdge,
   findNearestAnchor,
@@ -29,7 +28,7 @@ interface TimelineProps {
   onHoverIdx: (idx: number | null) => void;
 }
 
-type SnapTarget =
+type DragTarget =
   | { type: "anchor"; anchor: TimeAnchor }
   | { type: "edge"; itemId: string; edge: EdgeId; existingAnchorId: string | null };
 
@@ -60,8 +59,8 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
   const contribGroup: LaneEntry[] = [];
   for (const t of scenario.transfers) {
     if (t.sourceAccountId !== null) continue;
-    const tStart = resolvedStartDate(t, scenario.accounts);
-    const tEnd = resolvedEndDate(t, scenario.accounts) ?? scenario.timelineEnd;
+    const tStart = t.startDate;
+    const tEnd = t.endDate ?? scenario.timelineEnd;
     const localLane = assignLaneIn(contribGroup, tStart, tEnd);
     contribGroup.push({ start: tStart, end: tEnd, lane: localLane });
     lanes.push({ id: t.id, type: "transfer", start: tStart, end: tEnd, lane: nextLane + localLane });
@@ -71,15 +70,15 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
   // Each account gets a dedicated lane; its transfers collapse within their own group below it
   const accountLaneMap: Record<string, number> = {};
   for (const acc of scenario.accounts) {
-    const accStart = resolvedAccountStartDate(acc, scenario.timelineStart);
+    const accStart = acc.startDate;
     accountLaneMap[acc.id] = nextLane;
     lanes.push({ id: acc.id, type: "account", start: accStart, end: scenario.timelineEnd, lane: nextLane });
 
     const transferGroup: LaneEntry[] = [];
     for (const t of scenario.transfers) {
       if (t.sourceAccountId !== acc.id) continue;
-      const tStart = resolvedStartDate(t, scenario.accounts);
-      const tEnd = resolvedEndDate(t, scenario.accounts) ?? scenario.timelineEnd;
+      const tStart = t.startDate;
+      const tEnd = t.endDate ?? scenario.timelineEnd;
       const localLane = assignLaneIn(transferGroup, tStart, tEnd);
       transferGroup.push({ start: tStart, end: tEnd, lane: localLane });
       lanes.push({ id: t.id, type: "transfer", start: tStart, end: tEnd, lane: nextLane + 1 + localLane });
@@ -163,8 +162,8 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     // Minimum start for this item
     const itemMinStart = getItemMinStart(scenario, id);
 
-    // Track snap target for edge drag
-    const snapTargetRef = { current: null as SnapTarget | null };
+    // Track drag target for edge drag
+    const dragTargetRef = { current: null as DragTarget | null };
     let hasDragged = false;
     const MIN_DRAG_PX = 4;
     let highlightedEl: HTMLElement | null = null;
@@ -178,7 +177,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
       }
     }
 
-    const SNAP_THRESHOLD_PX = 15;
+    const MAGNET_THRESHOLD_PX = 15;
 
     const onMouseMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
@@ -195,11 +194,11 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
       }
 
       if (part !== "body") {
-        // --- Snap magnetism ---
+        // --- Magnet detection ---
         clearHighlight();
-        snapTargetRef.current = null;
+        dragTargetRef.current = null;
 
-        const thresholdMonths = (SNAP_THRESHOLD_PX / containerWidth) * viewMonths;
+        const thresholdMonths = (MAGNET_THRESHOLD_PX / containerWidth) * viewMonths;
         const myAnchor = findAnchorForEdge(anchors, id, draggedEdge);
         const nearestAnchor = findNearestAnchor(anchors, candidateDate, myAnchor?.id ?? null, thresholdMonths);
         const nearestEdge = findNearestEdge(anchors, scenario, candidateDate, id, lanes, thresholdMonths);
@@ -209,7 +208,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         let edgeDist = nearestEdge ? Math.abs(monthsBetween(candidateDate, resolveEdgeDate(scenario, nearestEdge.itemId, nearestEdge.edge))) : Infinity;
 
         if (nearestAnchor && anchorDist <= edgeDist) {
-          snapTargetRef.current = { type: "anchor", anchor: nearestAnchor };
+          dragTargetRef.current = { type: "anchor", anchor: nearestAnchor };
           candidateDate = nearestAnchor.date;
           // Highlight anchor line
           const el = document.querySelector<HTMLElement>(`[data-anchor-id="${nearestAnchor.id}"] > div:first-child`);
@@ -219,14 +218,14 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
             highlightedClass = "anchor-candidate-highlight";
           }
         } else if (nearestEdge) {
-          snapTargetRef.current = { type: "edge", itemId: nearestEdge.itemId, edge: nearestEdge.edge, existingAnchorId: nearestEdge.existingAnchorId };
+          dragTargetRef.current = { type: "edge", itemId: nearestEdge.itemId, edge: nearestEdge.edge, existingAnchorId: nearestEdge.existingAnchorId };
           candidateDate = resolveEdgeDate(scenario, nearestEdge.itemId, nearestEdge.edge);
           // Highlight edge handle
           const el = document.querySelector<HTMLElement>(`[data-edge-id="${nearestEdge.itemId}-${nearestEdge.edge}"]`);
           if (el) {
-            el.classList.add("snap-candidate-highlight");
+            el.classList.add("edge-candidate-highlight");
             highlightedEl = el;
-            highlightedClass = "snap-candidate-highlight";
+            highlightedClass = "edge-candidate-highlight";
           }
         }
 
@@ -293,8 +292,8 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
       if (part !== "body") {
         // Handle anchor connections on mouseup
         const myAnchor = findAnchorForEdge(anchors, id, draggedEdge);
-        const snap = snapTargetRef.current;
-        snapTargetRef.current = null;
+        const snap = dragTargetRef.current;
+        dragTargetRef.current = null;
 
         const anchorsToRemove: string[] = [];
         const anchorsToUpdate: TimeAnchor[] = [];
@@ -382,7 +381,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     <div ref={containerRef} className="relative w-full select-none">
       {/* Highlight styles */}
       <style>{`
-        .snap-candidate-highlight {
+        .edge-candidate-highlight {
           box-shadow: 0 0 0 2px #facc15, 0 0 8px 2px #fde68a;
           border-radius: 2px;
           z-index: 20 !important;

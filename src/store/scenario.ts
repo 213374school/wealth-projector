@@ -3,7 +3,6 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { Scenario, Account, Transfer, TimeAnchor } from "../types";
 import { makeDefaultScenario, generateId, currentMonth } from "../utils/defaults";
 import { runSimulation } from "../engine/simulate";
-import { resolvedAccountStartDate } from "../utils/snapDates";
 import { resolveEdgeDate } from "../utils/anchors";
 import type { SimulationResult } from "../types";
 
@@ -215,7 +214,7 @@ export const useScenarioStore = create<ScenarioStore>()(
             if (t.sourceAccountId !== id && t.targetAccountId !== id) return t;
             const srcAcc = t.sourceAccountId ? accounts.find(a => a.id === t.sourceAccountId) : null;
             const tgtAcc = t.targetAccountId ? accounts.find(a => a.id === t.targetAccountId) : null;
-            const candidates = [srcAcc, tgtAcc].filter(Boolean).map(a => resolvedAccountStartDate(a!, scenario.timelineStart));
+            const candidates = [srcAcc, tgtAcc].filter(Boolean).map(a => a!.startDate);
             const minStart = candidates.reduce((a, b) => a > b ? a : b, scenario.timelineStart);
             const clampedStart = t.startDate < minStart ? minStart : t.startDate;
             const clampedEnd = (t.endDate && t.endDate < minStart) ? minStart : t.endDate;

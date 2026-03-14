@@ -199,7 +199,9 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
     // Track drag target for edge drag
     const dragTargetRef = { current: null as DragTarget | null };
+    const tempAnchorIdRef = { current: null as string | null };
     let lastClampedDate = draggedEdge === "start" ? originalStart : (originalEnd ?? scenario.timelineEnd);
+    let lastBodyDelta = 0;
     let hasDragged = false;
     const MIN_DRAG_PX = 4;
     let highlightedEl: HTMLElement | null = null;
@@ -281,11 +283,19 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           }
         }
 
-        // If this edge has a single-edge anchor, move it in real-time too
+        // Move (or create) a single-edge anchor tracking this edge in real-time
         const ownAnchor = findAnchorForEdge(anchors, id, draggedEdge);
-        const ownAnchorUpdates: TimeAnchor[] = (ownAnchor && !ownAnchor.fixed && ownAnchor.edges.length === 1)
-          ? [{ ...ownAnchor, date: clampedDate }]
-          : [];
+        let ownAnchorUpdates: TimeAnchor[];
+        if (ownAnchor && !ownAnchor.fixed && ownAnchor.edges.length === 1) {
+          // Single-edge anchor: update in place
+          ownAnchorUpdates = [{ ...ownAnchor, date: clampedDate }];
+        } else if (hasDragged) {
+          // Multi-edge or no anchor: create/update a temp single-edge anchor
+          if (!tempAnchorIdRef.current) tempAnchorIdRef.current = generateId();
+          ownAnchorUpdates = [{ id: tempAnchorIdRef.current, date: clampedDate, edges: [{ itemId: id, edge: draggedEdge }] }];
+        } else {
+          ownAnchorUpdates = [];
+        }
         applyDragUpdate(accountUpdates, transferUpdates, [], ownAnchorUpdates);
       } else {
         // --- Body drag: move this item only ---
@@ -298,6 +308,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         if (newStartRaw < itemMinStart) {
           delta = monthsBetween(currentStart, itemMinStart);
         }
+        lastBodyDelta = delta;
 
         const accountUpdates: { id: string; changes: Partial<import("../types").Account> }[] = [];
         const transferUpdates: { id: string; changes: Partial<import("../types").Transfer> }[] = [];
@@ -345,17 +356,31 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         // Handle anchor connections on mouseup
         const myAnchor = findAnchorForEdge(anchors, id, draggedEdge);
         const snap = dragTargetRef.current;
+        const tempAnchorId = tempAnchorIdRef.current;
         dragTargetRef.current = null;
+        tempAnchorIdRef.current = null;
 
         const anchorsToRemove: string[] = [];
         const anchorsToUpdate: TimeAnchor[] = [];
 
         if (snap?.type === "anchor" && snap.anchor.id === myAnchor?.id) {
           // Re-connecting to same anchor — no anchor changes needed
+          if (tempAnchorId) anchorsToRemove.push(tempAnchorId);
         } else if (snap?.type === "edge" && snap.existingAnchorId !== null && snap.existingAnchorId === myAnchor?.id) {
           // Snapping to an edge in the same anchor — no anchor changes needed
+          if (tempAnchorId) anchorsToRemove.push(tempAnchorId);
+        } else if (snap === null && tempAnchorId) {
+          // Free drop with a temp anchor already in store — just disconnect from old multi-edge anchor
+          if (myAnchor) {
+            const stripped = removeEdgeFromAnchor(myAnchor, id, draggedEdge);
+            if (!myAnchor.fixed && stripped.edges.length < 1) {
+              anchorsToRemove.push(myAnchor.id);
+            } else {
+              anchorsToUpdate.push(stripped);
+            }
+          }
         } else if (snap === null && myAnchor && !myAnchor.fixed && myAnchor.edges.length === 1) {
-          // Free drop with own single-edge anchor — already at correct position from real-time updates, nothing to do
+          // Free drop with own single-edge anchor — already at correct position, nothing to do
         } else {
           // Disconnect from old anchor
           if (myAnchor) {
@@ -369,16 +394,18 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
           // Connect to new target
           if (snap === null) {
-            // Free drop — create single-edge anchor at current position
+            // Free drop with no temp anchor — create single-edge anchor now
             anchorsToUpdate.push({
               id: generateId(),
               date: lastClampedDate,
               edges: [{ itemId: id, edge: draggedEdge }],
             });
           } else if (snap.type === "anchor") {
+            if (tempAnchorId) anchorsToRemove.push(tempAnchorId);
             anchorsToUpdate.push(addEdgeToAnchor(snap.anchor, { itemId: id, edge: draggedEdge }));
           } else if (snap.existingAnchorId === null) {
-            // Create new anchor
+            // Create new anchor from two edges
+            if (tempAnchorId) anchorsToRemove.push(tempAnchorId);
             const resolvedDate = resolveEdgeDate(scenario, snap.itemId, snap.edge);
             anchorsToUpdate.push({
               id: generateId(),
@@ -387,6 +414,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
             });
           } else {
             // Join existing anchor (different from myAnchor)
+            if (tempAnchorId) anchorsToRemove.push(tempAnchorId);
             const target = anchors.find(a => a.id === snap.existingAnchorId);
             if (target) {
               anchorsToUpdate.push(addEdgeToAnchor(target, { itemId: id, edge: draggedEdge }));
@@ -405,11 +433,19 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         for (const anchor of anchors) {
           if (!anchor.edges.some(e => e.itemId === id)) continue;
           if (!anchor.fixed && anchor.edges.length === 1) continue; // single-edge anchor already followed in real-time
+          const disconnectedEdges = anchor.edges.filter(e => e.itemId === id);
           const newEdges = anchor.edges.filter(e => e.itemId !== id);
           if (!anchor.fixed && newEdges.length < 1) {
             anchorsToRemove.push(anchor.id);
           } else {
             anchorsToUpdate.push({ ...anchor, edges: newEdges });
+          }
+          // Spawn a new single-edge anchor for each disconnected edge at its post-drag position
+          for (const edge of disconnectedEdges) {
+            const newDate = edge.edge === "start"
+              ? addMonths(originalStart, lastBodyDelta)
+              : (originalEnd ? addMonths(originalEnd, lastBodyDelta) : anchor.date);
+            anchorsToUpdate.push({ id: generateId(), date: newDate, edges: [{ itemId: id, edge: edge.edge }] });
           }
         }
 

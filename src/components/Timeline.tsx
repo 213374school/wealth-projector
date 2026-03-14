@@ -281,7 +281,12 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           }
         }
 
-        applyDragUpdate(accountUpdates, transferUpdates, [], []);
+        // If this edge has a single-edge anchor, move it in real-time too
+        const ownAnchor = findAnchorForEdge(anchors, id, draggedEdge);
+        const ownAnchorUpdates: TimeAnchor[] = (ownAnchor && !ownAnchor.fixed && ownAnchor.edges.length === 1)
+          ? [{ ...ownAnchor, date: clampedDate }]
+          : [];
+        applyDragUpdate(accountUpdates, transferUpdates, [], ownAnchorUpdates);
       } else {
         // --- Body drag: move this item only ---
         const currentStart = resolveEdgeDate(scenario, id, "start");
@@ -349,6 +354,8 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           // Re-connecting to same anchor — no anchor changes needed
         } else if (snap?.type === "edge" && snap.existingAnchorId !== null && snap.existingAnchorId === myAnchor?.id) {
           // Snapping to an edge in the same anchor — no anchor changes needed
+        } else if (snap === null && myAnchor && !myAnchor.fixed && myAnchor.edges.length === 1) {
+          // Free drop with own single-edge anchor — already at correct position from real-time updates, nothing to do
         } else {
           // Disconnect from old anchor
           if (myAnchor) {

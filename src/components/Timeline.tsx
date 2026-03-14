@@ -200,6 +200,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     // Track drag target for edge drag
     const dragTargetRef = { current: null as DragTarget | null };
     const tempAnchorIdRef = { current: null as string | null };
+    const bodyTempAnchorsRef = { current: new Map<string, string>() }; // edge → tempAnchorId
     let lastClampedDate = draggedEdge === "start" ? originalStart : (originalEnd ?? scenario.timelineEnd);
     let lastBodyDelta = 0;
     let hasDragged = false;
@@ -331,17 +332,30 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           }
         }
 
-        // Update single-edge anchors that belong only to this item so they follow in real-time
-        const singleAnchorUpdates: TimeAnchor[] = [];
+        // Update anchors in real-time: single-edge anchors follow directly;
+        // multi-edge shared anchors get a temp single-edge anchor per connected edge
+        const anchorUpdates: TimeAnchor[] = [];
         for (const anch of anchors) {
-          if (!anch.fixed && anch.edges.length === 1 && anch.edges[0].itemId === id) {
-            const newDate = anch.edges[0].edge === "start"
+          if (anch.fixed || !anch.edges.some(e => e.itemId === id)) continue;
+          if (anch.edges.length === 1) {
+            const edgeId = anch.edges[0].edge;
+            const newDate = edgeId === "start"
               ? addMonths(originalStart, delta)
               : (originalEnd ? addMonths(originalEnd, delta) : anch.date);
-            singleAnchorUpdates.push({ ...anch, date: newDate });
+            anchorUpdates.push({ ...anch, date: newDate });
+          } else if (hasDragged) {
+            for (const edge of anch.edges.filter(e => e.itemId === id)) {
+              if (!bodyTempAnchorsRef.current.has(edge.edge))
+                bodyTempAnchorsRef.current.set(edge.edge, generateId());
+              const tempId = bodyTempAnchorsRef.current.get(edge.edge)!;
+              const newDate = edge.edge === "start"
+                ? addMonths(originalStart, delta)
+                : (originalEnd ? addMonths(originalEnd, delta) : anch.date);
+              anchorUpdates.push({ id: tempId, date: newDate, edges: [{ itemId: id, edge: edge.edge }] });
+            }
           }
         }
-        applyDragUpdate(accountUpdates, transferUpdates, [], singleAnchorUpdates);
+        applyDragUpdate(accountUpdates, transferUpdates, [], anchorUpdates);
       }
     };
 
@@ -440,8 +454,9 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           } else {
             anchorsToUpdate.push({ ...anchor, edges: newEdges });
           }
-          // Spawn a new single-edge anchor for each disconnected edge at its post-drag position
+          // Spawn a new single-edge anchor for disconnected edges not already covered by a temp anchor
           for (const edge of disconnectedEdges) {
+            if (bodyTempAnchorsRef.current.has(edge.edge)) continue; // temp anchor already in store
             const newDate = edge.edge === "start"
               ? addMonths(originalStart, lastBodyDelta)
               : (originalEnd ? addMonths(originalEnd, lastBodyDelta) : anchor.date);

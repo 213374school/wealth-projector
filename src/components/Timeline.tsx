@@ -35,40 +35,49 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
   const viewMonths = viewportEnd - viewportStart + 1;
 
-  // Assign lanes to avoid overlap, with an optional minimum lane
   const lanes: { id: string; type: "account" | "transfer"; start: string; end: string; lane: number }[] = [];
 
-  function assignLane(startDate: string, endDate: string, minLane = 0): number {
+  // Assign a lane within an isolated group (no cross-group contamination)
+  type LaneEntry = { start: string; end: string; lane: number };
+  function assignLaneIn(group: LaneEntry[], startDate: string, endDate: string, minLane = 0): number {
     for (let lane = minLane; ; lane++) {
-      const occupied = lanes.filter(l => l.lane === lane);
-      const overlaps = occupied.some(l => startDate < l.end && endDate > l.start);
+      const overlaps = group.filter(l => l.lane === lane).some(l => startDate < l.end && endDate > l.start);
       if (!overlaps) return lane;
     }
   }
 
-  // Contributions (null source) appear first, before all accounts
+  let nextLane = 0;
+
+  // Contributions (null source) — own isolated group at the top
+  const contribGroup: LaneEntry[] = [];
   for (const t of scenario.transfers) {
     if (t.sourceAccountId !== null) continue;
     const tStart = resolvedStartDate(t, scenario.accounts);
     const tEnd = resolvedEndDate(t, scenario.accounts) ?? scenario.timelineEnd;
-    lanes.push({ id: t.id, type: "transfer", start: tStart, end: tEnd, lane: assignLane(tStart, tEnd) });
+    const localLane = assignLaneIn(contribGroup, tStart, tEnd);
+    contribGroup.push({ start: tStart, end: tEnd, lane: localLane });
+    lanes.push({ id: t.id, type: "transfer", start: tStart, end: tEnd, lane: nextLane + localLane });
   }
+  if (contribGroup.length > 0) nextLane += Math.max(...contribGroup.map(l => l.lane)) + 1;
 
-  // For each account, assign its lane then immediately assign its transfers below it
+  // Each account gets a dedicated lane; its transfers collapse within their own group below it
   const accountLaneMap: Record<string, number> = {};
   for (const acc of scenario.accounts) {
     const accStart = resolvedAccountStartDate(acc, scenario.timelineStart);
-    const lane = assignLane(accStart, scenario.timelineEnd);
-    accountLaneMap[acc.id] = lane;
-    lanes.push({ id: acc.id, type: "account", start: accStart, end: scenario.timelineEnd, lane });
+    accountLaneMap[acc.id] = nextLane;
+    lanes.push({ id: acc.id, type: "account", start: accStart, end: scenario.timelineEnd, lane: nextLane });
 
+    const transferGroup: LaneEntry[] = [];
     for (const t of scenario.transfers) {
       if (t.sourceAccountId !== acc.id) continue;
       const tStart = resolvedStartDate(t, scenario.accounts);
       const tEnd = resolvedEndDate(t, scenario.accounts) ?? scenario.timelineEnd;
-      const tLane = assignLane(tStart, tEnd, lane + 1);
-      lanes.push({ id: t.id, type: "transfer", start: tStart, end: tEnd, lane: tLane });
+      const localLane = assignLaneIn(transferGroup, tStart, tEnd);
+      transferGroup.push({ start: tStart, end: tEnd, lane: localLane });
+      lanes.push({ id: t.id, type: "transfer", start: tStart, end: tEnd, lane: nextLane + 1 + localLane });
     }
+
+    nextLane += 1 + (transferGroup.length > 0 ? Math.max(...transferGroup.map(l => l.lane)) + 1 : 0);
   }
 
   const maxLane = lanes.reduce((m, l) => Math.max(m, l.lane), 0);

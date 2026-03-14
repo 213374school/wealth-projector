@@ -47,6 +47,18 @@ export function validateScenario(data: unknown): ValidationResult {
     if (!r.valid) return r;
   }
 
+  if (d["anchors"] !== undefined) {
+    if (!Array.isArray(d["anchors"])) return { valid: false, error: "anchors must be an array" };
+    const allItemIds = new Set([
+      ...Array.from(accountIds),
+      ...(d["transfers"] as Record<string, unknown>[]).map(t => t["id"] as string),
+    ]);
+    for (const anchor of d["anchors"] as unknown[]) {
+      const r = validateTimeAnchor(anchor, allItemIds);
+      if (!r.valid) return r;
+    }
+  }
+
   return { valid: true };
 }
 
@@ -79,6 +91,27 @@ function validateTransfer(data: unknown, accountIds: Set<string>): ValidationRes
   }
   if (typeof d["amount"] !== "number") return { valid: false, error: "Transfer missing amount" };
   if (typeof d["taxRate"] !== "number") return { valid: false, error: "Transfer missing taxRate" };
+  return { valid: true };
+}
+
+function validateTimeAnchor(data: unknown, itemIds: Set<string>): ValidationResult {
+  if (typeof data !== "object" || data === null) return { valid: false, error: "TimeAnchor is not an object" };
+  const d = data as Record<string, unknown>;
+  if (typeof d["id"] !== "string") return { valid: false, error: "TimeAnchor missing id" };
+  if (typeof d["date"] !== "string" || !isValidYYYYMM(d["date"] as string)) {
+    return { valid: false, error: "TimeAnchor date must be YYYY-MM" };
+  }
+  const isFixed = d["fixed"] === true;
+  if (!Array.isArray(d["edges"]) || (!isFixed && d["edges"].length < 2)) {
+    return { valid: false, error: "TimeAnchor edges must be an array with length >= 2" };
+  }
+  for (const edge of d["edges"] as unknown[]) {
+    if (typeof edge !== "object" || edge === null) return { valid: false, error: "TimeAnchor edge is not an object" };
+    const e = edge as Record<string, unknown>;
+    if (typeof e["itemId"] !== "string") return { valid: false, error: "TimeAnchor edge missing itemId" };
+    if (!itemIds.has(e["itemId"] as string)) return { valid: false, error: `TimeAnchor edge.itemId not found: ${e["itemId"]}` };
+    if (e["edge"] !== "start" && e["edge"] !== "end") return { valid: false, error: `TimeAnchor edge.edge must be "start" or "end"` };
+  }
   return { valid: true };
 }
 

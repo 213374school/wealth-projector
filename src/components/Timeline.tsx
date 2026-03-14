@@ -1,7 +1,23 @@
 import { useRef, useCallback } from "react";
-import type { Transfer, Scenario } from "../types";
-import { useScenarioStore } from "../store/scenario";
+import type { Transfer, Scenario, TimeAnchor } from "../types";
+import { useScenarioStore, FIXED_END_ID } from "../store/scenario";
 import { resolvedStartDate, resolvedEndDate, resolvedAccountStartDate } from "../utils/snapDates";
+import {
+  findAnchorForEdge,
+  findNearestAnchor,
+  findNearestEdge,
+  computeAnchorDragTarget,
+  computeEdgeDragTargetSimple,
+  removeEdgeFromAnchor,
+  addEdgeToAnchor,
+  resolveEdgeDate,
+  monthsBetween,
+  addMonths,
+  getItemMinStart,
+} from "../utils/anchors";
+import { monthToLabel } from "../utils/formatting";
+import { generateId } from "../utils/defaults";
+import type { EdgeId } from "../types";
 
 interface TimelineProps {
   scenario: Scenario;
@@ -13,25 +29,17 @@ interface TimelineProps {
   onHoverIdx: (idx: number | null) => void;
 }
 
-function monthsBetween(a: string, b: string): number {
-  const [ay, am] = a.split("-").map(Number);
-  const [by, bm] = b.split("-").map(Number);
-  return (by - ay) * 12 + (bm - am);
-}
-
-function addMonths(date: string, n: number): string {
-  const [y, m] = date.split("-").map(Number);
-  const total = y * 12 + (m - 1) + n;
-  const ny = Math.floor(total / 12);
-  const nm = (total % 12) + 1;
-  return `${ny}-${String(nm).padStart(2, "0")}`;
-}
-
+type SnapTarget =
+  | { type: "anchor"; anchor: TimeAnchor }
+  | { type: "edge"; itemId: string; edge: EdgeId; existingAnchorId: string | null };
 
 export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd, onSelectItem, hoveredIdx, onHoverIdx }: TimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const updateAccount = useScenarioStore(s => s.updateAccount);
-  const updateTransfer = useScenarioStore(s => s.updateTransfer);
+  const applyDragUpdate = useScenarioStore(s => s.applyDragUpdate);
+  const addAnchor = useScenarioStore(s => s.addAnchor);
+  const updateAnchor = useScenarioStore(s => s.updateAnchor);
+  const removeAnchor = useScenarioStore(s => s.removeAnchor);
+  const anchors = scenario.anchors ?? [];
 
   const viewMonths = viewportEnd - viewportStart + 1;
 
@@ -85,7 +93,56 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
   const h = laneHeight - 4;         // bar height = 20px
   const arrowTip = h / 2;           // = 10px — width of the chevron point
   const minCompactWidth = (h + arrowTip * 2 + 8) / 2; // enough to show both color halves clearly
-  const barsHeight = (maxLane + 1) * laneHeight + 8;
+  const labelHeight = 16;           // reserved at top for anchor date labels
+  const barsHeight = (maxLane + 1) * laneHeight + 8 + labelHeight;
+
+  // Build anchored edge set for dot indicators
+  const anchoredEdgeKeys = new Set<string>();
+  for (const anchor of anchors)
+    for (const e of anchor.edges)
+      anchoredEdgeKeys.add(`${e.itemId}:${e.edge}`);
+
+  const handleAnchorDrag = useCallback((e: React.MouseEvent, anchor: TimeAnchor) => {
+    e.stopPropagation();
+    const container = containerRef.current;
+    if (!container) return;
+    const containerWidth = container.clientWidth;
+    const startX = e.clientX;
+    const originalDate = anchor.date;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const monthDelta = Math.round((dx / containerWidth) * viewMonths);
+      const rawDate = addMonths(originalDate, monthDelta);
+      const clamped = computeAnchorDragTarget(scenario, anchor, rawDate);
+
+      const accountUpdates: { id: string; changes: Partial<import("../types").Account> }[] = [];
+      const transferUpdates: { id: string; changes: Partial<import("../types").Transfer> }[] = [];
+
+      for (const edge of anchor.edges) {
+        const acc = scenario.accounts.find(a => a.id === edge.itemId);
+        if (acc) {
+          if (edge.edge === "start") accountUpdates.push({ id: edge.itemId, changes: { startDate: clamped } });
+        } else {
+          const t = scenario.transfers.find(t => t.id === edge.itemId);
+          if (t) {
+            if (edge.edge === "start") transferUpdates.push({ id: edge.itemId, changes: { startDate: clamped } });
+            else transferUpdates.push({ id: edge.itemId, changes: { endDate: clamped } });
+          }
+        }
+      }
+
+      applyDragUpdate(accountUpdates, transferUpdates, [], [{ ...anchor, date: clamped }]);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }, [viewMonths, scenario, applyDragUpdate]);
 
   const handleDrag = useCallback((
     e: React.MouseEvent,
@@ -101,66 +158,211 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     const containerWidth = container.clientWidth;
     const startX = e.clientX;
 
-    // For transfers, compute the earliest allowed start date from source/target accounts
-    const transferMinStart = (() => {
-      if (type !== "transfer") return scenario.timelineStart;
-      const t = scenario.transfers.find(t => t.id === id);
-      if (!t) return scenario.timelineStart;
-      const dates: string[] = [];
-      if (t.sourceAccountId) {
-        const a = scenario.accounts.find(a => a.id === t.sourceAccountId);
-        if (a) dates.push(resolvedAccountStartDate(a, scenario.timelineStart));
+    const draggedEdge: EdgeId = part === "right" ? "end" : "start";
+
+    // Minimum start for this item
+    const itemMinStart = getItemMinStart(scenario, id);
+
+    // Track snap target for edge drag
+    const snapTargetRef = { current: null as SnapTarget | null };
+    let hasDragged = false;
+    const MIN_DRAG_PX = 4;
+    let highlightedEl: HTMLElement | null = null;
+    let highlightedClass = "";
+
+    function clearHighlight() {
+      if (highlightedEl) {
+        highlightedEl.classList.remove(highlightedClass);
+        highlightedEl = null;
+        highlightedClass = "";
       }
-      if (t.targetAccountId) {
-        const a = scenario.accounts.find(a => a.id === t.targetAccountId);
-        if (a) dates.push(resolvedAccountStartDate(a, scenario.timelineStart));
-      }
-      return dates.reduce((a, b) => a > b ? a : b, scenario.timelineStart);
-    })();
+    }
+
+    const SNAP_THRESHOLD_PX = 15;
 
     const onMouseMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
+      if (!hasDragged && Math.abs(dx) >= MIN_DRAG_PX) hasDragged = true;
       const monthDelta = Math.round((dx / containerWidth) * viewMonths);
 
-      let newStart = originalStart;
-      let newEnd = originalEnd;
-
+      let candidateDate: string;
       if (part === "left") {
-        newStart = addMonths(originalStart, monthDelta);
-        if (newStart > (newEnd ?? scenario.timelineEnd)) newStart = newEnd ?? scenario.timelineEnd;
-        if (newStart < transferMinStart) newStart = transferMinStart;
-      } else if (part === "right" && newEnd !== null) {
-        newEnd = addMonths(originalEnd!, monthDelta);
-        if (newEnd < newStart) newEnd = newStart;
-        if (newEnd > scenario.timelineEnd) newEnd = scenario.timelineEnd;
-      } else if (part === "body") {
-        newStart = addMonths(originalStart, monthDelta);
-        if (newEnd !== null) newEnd = addMonths(originalEnd!, monthDelta);
-        if (newStart < transferMinStart) {
-          const shift = monthsBetween(newStart, transferMinStart);
-          newStart = transferMinStart;
-          if (newEnd !== null) newEnd = addMonths(newEnd, shift);
-        }
+        candidateDate = addMonths(originalStart, monthDelta);
+      } else if (part === "right") {
+        candidateDate = addMonths(originalEnd!, monthDelta);
+      } else {
+        candidateDate = addMonths(originalStart, monthDelta);
       }
 
-      if (type === "account") {
-        updateAccount(id, { startDate: newStart });
+      if (part !== "body") {
+        // --- Snap magnetism ---
+        clearHighlight();
+        snapTargetRef.current = null;
+
+        const thresholdMonths = (SNAP_THRESHOLD_PX / containerWidth) * viewMonths;
+        const myAnchor = findAnchorForEdge(anchors, id, draggedEdge);
+        const nearestAnchor = findNearestAnchor(anchors, candidateDate, myAnchor?.id ?? null, thresholdMonths);
+        const nearestEdge = findNearestEdge(anchors, scenario, candidateDate, id, lanes, thresholdMonths);
+
+        // Anchor wins if both in range; compare distances
+        let anchorDist = nearestAnchor ? Math.abs(monthsBetween(candidateDate, nearestAnchor.date)) : Infinity;
+        let edgeDist = nearestEdge ? Math.abs(monthsBetween(candidateDate, resolveEdgeDate(scenario, nearestEdge.itemId, nearestEdge.edge))) : Infinity;
+
+        if (nearestAnchor && anchorDist <= edgeDist) {
+          snapTargetRef.current = { type: "anchor", anchor: nearestAnchor };
+          candidateDate = nearestAnchor.date;
+          // Highlight anchor line
+          const el = document.querySelector<HTMLElement>(`[data-anchor-id="${nearestAnchor.id}"] > div:first-child`);
+          if (el) {
+            el.classList.add("anchor-candidate-highlight");
+            highlightedEl = el;
+            highlightedClass = "anchor-candidate-highlight";
+          }
+        } else if (nearestEdge) {
+          snapTargetRef.current = { type: "edge", itemId: nearestEdge.itemId, edge: nearestEdge.edge, existingAnchorId: nearestEdge.existingAnchorId };
+          candidateDate = resolveEdgeDate(scenario, nearestEdge.itemId, nearestEdge.edge);
+          // Highlight edge handle
+          const el = document.querySelector<HTMLElement>(`[data-edge-id="${nearestEdge.itemId}-${nearestEdge.edge}"]`);
+          if (el) {
+            el.classList.add("snap-candidate-highlight");
+            highlightedEl = el;
+            highlightedClass = "snap-candidate-highlight";
+          }
+        }
+
+        // --- Apply single-item update ---
+        const clampedDate = computeEdgeDragTargetSimple(scenario, id, draggedEdge, candidateDate);
+        const accountUpdates: { id: string; changes: Partial<import("../types").Account> }[] = [];
+        const transferUpdates: { id: string; changes: Partial<import("../types").Transfer> }[] = [];
+
+        if (type === "account") {
+          accountUpdates.push({ id, changes: { startDate: clampedDate } });
+        } else {
+          if (draggedEdge === "start") {
+            transferUpdates.push({ id, changes: { startDate: clampedDate } });
+          } else {
+            transferUpdates.push({ id, changes: { endDate: clampedDate } });
+          }
+        }
+
+        applyDragUpdate(accountUpdates, transferUpdates, [], []);
       } else {
-        updateTransfer(id, {
-          startDate: newStart,
-          ...(part !== "left" && newEnd !== null ? { endDate: newEnd } : {}),
-        });
+        // --- Body drag: move this item only ---
+        const currentStart = resolveEdgeDate(scenario, id, "start");
+        const rawDelta = monthsBetween(currentStart, candidateDate);
+
+        // Clamp delta: new start must be >= itemMinStart
+        let delta = rawDelta;
+        const newStartRaw = addMonths(currentStart, delta);
+        if (newStartRaw < itemMinStart) {
+          delta = monthsBetween(currentStart, itemMinStart);
+        }
+
+        const accountUpdates: { id: string; changes: Partial<import("../types").Account> }[] = [];
+        const transferUpdates: { id: string; changes: Partial<import("../types").Transfer> }[] = [];
+
+        if (type === "account") {
+          const acc = scenario.accounts.find(a => a.id === id);
+          if (acc) {
+            const newStart = addMonths(resolveEdgeDate(scenario, id, "start"), delta);
+            accountUpdates.push({ id, changes: { startDate: newStart } });
+          }
+        } else {
+          const t = scenario.transfers.find(t => t.id === id);
+          if (t) {
+            const newStart = addMonths(resolveEdgeDate(scenario, id, "start"), delta);
+            const changes: Partial<import("../types").Transfer> = { startDate: newStart };
+            if (t.endDate !== null) {
+              changes.endDate = addMonths(t.endDate, delta);
+            }
+            transferUpdates.push({ id, changes });
+          }
+        }
+
+        applyDragUpdate(accountUpdates, transferUpdates, [], []);
       }
     };
 
     const onMouseUp = () => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      clearHighlight();
+
+      if (!hasDragged) return;
+
+      if (part !== "body") {
+        // Handle anchor connections on mouseup
+        const myAnchor = findAnchorForEdge(anchors, id, draggedEdge);
+        const snap = snapTargetRef.current;
+        snapTargetRef.current = null;
+
+        const anchorsToRemove: string[] = [];
+        const anchorsToUpdate: TimeAnchor[] = [];
+
+        if (snap?.type === "anchor" && snap.anchor.id === myAnchor?.id) {
+          // Re-connecting to same anchor — no anchor changes needed
+        } else if (snap?.type === "edge" && snap.existingAnchorId !== null && snap.existingAnchorId === myAnchor?.id) {
+          // Snapping to an edge in the same anchor — no anchor changes needed
+        } else {
+          // Disconnect from old anchor
+          if (myAnchor) {
+            const stripped = removeEdgeFromAnchor(myAnchor, id, draggedEdge);
+            if (!myAnchor.fixed && stripped.edges.length < 2) {
+              anchorsToRemove.push(myAnchor.id);
+            } else {
+              anchorsToUpdate.push(stripped);
+            }
+          }
+
+          // Connect to new target
+          if (snap === null) {
+            // Free drop — done
+          } else if (snap.type === "anchor") {
+            anchorsToUpdate.push(addEdgeToAnchor(snap.anchor, { itemId: id, edge: draggedEdge }));
+          } else if (snap.existingAnchorId === null) {
+            // Create new anchor
+            const resolvedDate = resolveEdgeDate(scenario, snap.itemId, snap.edge);
+            anchorsToUpdate.push({
+              id: generateId(),
+              date: resolvedDate,
+              edges: [{ itemId: snap.itemId, edge: snap.edge }, { itemId: id, edge: draggedEdge }],
+            });
+          } else {
+            // Join existing anchor (different from myAnchor)
+            const target = anchors.find(a => a.id === snap.existingAnchorId);
+            if (target) {
+              anchorsToUpdate.push(addEdgeToAnchor(target, { itemId: id, edge: draggedEdge }));
+            }
+          }
+        }
+
+        if (anchorsToRemove.length > 0 || anchorsToUpdate.length > 0) {
+          applyDragUpdate([], [], anchorsToRemove, anchorsToUpdate);
+        }
+      } else {
+        // Body drag mouseup — disconnect all of this item's edges from their anchors
+        const anchorsToRemove: string[] = [];
+        const anchorsToUpdate: TimeAnchor[] = [];
+
+        for (const anchor of anchors) {
+          if (!anchor.edges.some(e => e.itemId === id)) continue;
+          const newEdges = anchor.edges.filter(e => e.itemId !== id);
+          if (!anchor.fixed && newEdges.length < 2) {
+            anchorsToRemove.push(anchor.id);
+          } else {
+            anchorsToUpdate.push({ ...anchor, edges: newEdges });
+          }
+        }
+
+        if (anchorsToRemove.length > 0 || anchorsToUpdate.length > 0) {
+          applyDragUpdate([], [], anchorsToRemove, anchorsToUpdate);
+        }
+      }
     };
 
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
-  }, [viewMonths, scenario, updateAccount, updateTransfer]);
+  }, [viewMonths, scenario, applyDragUpdate, addAnchor, updateAnchor, removeAnchor, anchors, lanes]);
 
   const nameMap = Object.fromEntries([
     ...scenario.accounts.map(a => [a.id, a.name]),
@@ -178,9 +380,21 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
   return (
     <div ref={containerRef} className="relative w-full select-none">
+      {/* Highlight styles */}
+      <style>{`
+        .snap-candidate-highlight {
+          box-shadow: 0 0 0 2px #facc15, 0 0 8px 2px #fde68a;
+          border-radius: 2px;
+          z-index: 20 !important;
+        }
+        .anchor-candidate-highlight {
+          background: rgba(99,202,183,1) !important;
+          opacity: 1 !important;
+        }
+      `}</style>
       {/* Bars */}
       <div
-        className="relative overflow-x-hidden"
+        className="relative"
         style={{ height: barsHeight }}
         onMouseMove={e => {
           const rect = e.currentTarget.getBoundingClientRect();
@@ -206,107 +420,178 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
             />
           );
         })()}
-      {lanes.map(({ id, type, start, end, lane }) => {
-        const rawStartIdx = monthsBetween(scenario.timelineStart, start) - viewportStart;
-        const startIdx = Math.max(0, rawStartIdx);
-        const endIdx = Math.min(viewMonths - 1, monthsBetween(scenario.timelineStart, end) - viewportStart);
-        const leftPct = (startIdx / (viewMonths - 1)) * 100;
-        const rightPct = (endIdx / (viewMonths - 1)) * 100;
-        const widthPct = rightPct - leftPct;
-        const stuckRight = type === "transfer" && rawStartIdx > viewMonths - 1;
 
-        const acc = scenario.accounts.find(a => a.id === id);
-        const transfer = scenario.transfers.find(t => t.id === id);
-        const isOneTime = (transfer as Transfer | undefined)?.isOneTime ?? false;
+        {/* Anchor lines — rendered before bars so items appear on top */}
+        {anchors.map(anchor => {
+          const monthIdx = monthsBetween(scenario.timelineStart, anchor.date) - viewportStart;
+          if (monthIdx < 0 || monthIdx > viewMonths - 1) return null;
+          const pct = (monthIdx / (viewMonths - 1)) * 100;
+          const isFixed = !!anchor.fixed;
+          const lineColor = isFixed ? "rgba(148,163,184,0.55)" : "rgba(99,202,183,0.65)";
+          const labelColor = isFixed ? "rgba(148,163,184,0.75)" : "rgba(99,202,183,0.85)";
+          return (
+            <div
+              key={anchor.id}
+              data-anchor-id={anchor.id}
+              className={`absolute top-0 bottom-0 ${isFixed ? "cursor-default" : "cursor-ew-resize"}`}
+              style={{ left: `${pct}%`, width: 9, transform: "translateX(-4px)", zIndex: 1 }}
+              onMouseDown={isFixed ? undefined : e => handleAnchorDrag(e, anchor)}
+              onDoubleClick={isFixed ? undefined : e => { e.stopPropagation(); removeAnchor(anchor.id); }}
+            >
+              {/* 1px visual line centered in hit area */}
+              <div
+                className="absolute inset-y-0 pointer-events-none"
+                style={{ left: 3.5, width: 1, background: lineColor }}
+              />
+              {/* date label */}
+              <div
+                className="absolute pointer-events-none"
+                style={{ top: 2, left: anchor.id === FIXED_END_ID ? "auto" : 6, right: anchor.id === FIXED_END_ID ? 6 : "auto", fontSize: 9, color: labelColor, whiteSpace: "nowrap" }}
+              >
+                {monthToLabel(anchor.date)}
+              </div>
+            </div>
+          );
+        })}
 
-        const isSelected = id === selectedItemId;
-        const top = lane * laneHeight + 2;
+        {lanes.map(({ id, type, start, end, lane }) => {
+          const rawStartIdx = monthsBetween(scenario.timelineStart, start) - viewportStart;
+          const startIdx = Math.max(0, rawStartIdx);
+          const endIdx = Math.min(viewMonths - 1, monthsBetween(scenario.timelineStart, end) - viewportStart);
+          const leftPct = (startIdx / (viewMonths - 1)) * 100;
+          const rightPct = (endIdx / (viewMonths - 1)) * 100;
+          const widthPct = rightPct - leftPct;
+          const stuckRight = type === "transfer" && rawStartIdx > viewMonths - 1;
 
-        // Snap state — locked handles show a different cursor
-        const startSnapped = type === "transfer" ? !!transfer?.startSnap : !!acc?.startSnap;
-        const endSnapped = type === "transfer" && !!transfer?.endSnap;
+          const acc = scenario.accounts.find(a => a.id === id);
+          const transfer = scenario.transfers.find(t => t.id === id);
+          const isOneTime = (transfer as Transfer | undefined)?.isOneTime ?? false;
 
-        // For drag: pass literal dates (not resolved) so the handler writes back correctly
-        const dragStart = transfer ? transfer.startDate : acc!.startDate;
-        const dragEnd = transfer ? transfer.endDate : null;
+          const isSelected = id === selectedItemId;
+          const top = lane * laneHeight + 2 + labelHeight;
 
-        const isTransfer = type === "transfer" && !!transfer;
+          // Whether edges are anchored
+          const startAnchored = anchoredEdgeKeys.has(`${id}:start`);
+          const endAnchored = anchoredEdgeKeys.has(`${id}:end`);
 
-        let srcColor = "#6b7280";
-        let tgtColor = "#6b7280";
-        let tgtName: string | undefined;
-        if (type === "account" && acc) srcColor = acc.color;
-        if (isTransfer) {
-          const srcAcc = scenario.accounts.find(a => a.id === transfer!.sourceAccountId);
-          const tgtAcc = scenario.accounts.find(a => a.id === transfer!.targetAccountId);
-          srcColor = srcAcc?.color ?? "#6b7280";
-          tgtColor = tgtAcc?.color ?? "#6b7280";
-          tgtName = tgtAcc?.name;
-        }
+          // For drag: pass literal dates (not resolved) so the handler writes back correctly
+          const dragStart = transfer ? transfer.startDate : acc!.startDate;
+          const dragEnd = transfer ? transfer.endDate : null;
 
-        return (
-          <div
-            key={id}
-            className={`absolute flex items-center rounded cursor-pointer ${isSelected ? "ring-2 ring-white ring-offset-1" : ""}`}
-            style={{
-              left: stuckRight ? `calc(100% - ${minCompactWidth - 1}px)` : `calc(${leftPct}% + 1px)`,
-              width: isTransfer ? (isOneTime ? 0 : `calc(${widthPct}% - 2px)`) : `calc(${Math.max(widthPct, 0.5)}% - 2px)`,
-              minWidth: isTransfer ? `${minCompactWidth - 2}px` : undefined,
-              top,
-              height: h,
-              background: isTransfer ? "transparent" : srcColor,
-              opacity: isTransfer ? 0.6 : 0.85,
-              overflow: "hidden",
-            }}
-            onClick={() => onSelectItem(id, type)}
-            onMouseDown={e => !startSnapped && handleDrag(e, id, type, "body", dragStart, dragEnd)}
-          >
-            {isTransfer && (
-              <>
-                {/* Left (src) section: tip at splitOffset past center, making straight src = straight tgt */}
-                <div style={{
-                  position: "absolute",
-                  left: 0, top: 0, bottom: 0,
-                  width: `calc(50% + ${(arrowTip - 2) / 2}px)`,
-                  background: srcColor,
-                  clipPath: `polygon(0% 0%, calc(100% - ${arrowTip}px) 0%, 100% 50%, calc(100% - ${arrowTip}px) 100%, 0% 100%)`,
-                  pointerEvents: "none",
-                }} />
-                {/* Right (tgt) section: notch aligns with the src tip */}
-                <div style={{
-                  position: "absolute",
-                  left: `calc(50% - ${(arrowTip + 2) / 2}px)`,
-                  right: 0, top: 0, bottom: 0,
-                  background: tgtColor,
-                  clipPath: `polygon(2px 0%, 100% 0%, 100% 100%, 2px 100%, ${arrowTip + 2}px 50%, 2px 0%)`,
-                  pointerEvents: "none",
-                }} />
-              </>
-            )}
-            {!isOneTime && widthPct > 5 && (
-              <span className={`text-xs text-white truncate px-1 pointer-events-none ${!isTransfer ? "font-bold" : ""}`} style={{ position: "relative", zIndex: 1 }}>{nameMap[id]}</span>
-            )}
-            {isTransfer && !isOneTime && widthPct > 5 && tgtName && (
-              <span className="absolute right-1 text-xs text-white pointer-events-none" style={{ zIndex: 1 }}>{tgtName}</span>
-            )}
-            {/* Handles — hidden/locked when snapped */}
-            {!isOneTime && (
-              <>
-                <div
-                  className={`absolute left-0 top-0 bottom-0 w-2 ${startSnapped ? "cursor-not-allowed opacity-40" : "cursor-ew-resize"}`}
-                  onMouseDown={e => { e.stopPropagation(); if (!startSnapped) handleDrag(e, id, type, "left", dragStart, dragEnd); }}
-                />
-                {(type === "transfer" && (transfer?.endDate !== null || endSnapped)) && (
+          const isTransfer = type === "transfer" && !!transfer;
+
+          let srcColor = "#6b7280";
+          let tgtColor = "#6b7280";
+          let tgtName: string | undefined;
+          if (type === "account" && acc) srcColor = acc.color;
+          if (isTransfer) {
+            const srcAcc = scenario.accounts.find(a => a.id === transfer!.sourceAccountId);
+            const tgtAcc = scenario.accounts.find(a => a.id === transfer!.targetAccountId);
+            srcColor = srcAcc?.color ?? "#6b7280";
+            tgtColor = tgtAcc?.color ?? "#6b7280";
+            tgtName = tgtAcc?.name;
+          }
+
+          return (
+            <div
+              key={id}
+              className={`absolute flex items-center rounded cursor-pointer ${isSelected ? "ring-2 ring-white ring-offset-1" : ""}`}
+              style={{
+                left: stuckRight ? `calc(100% - ${minCompactWidth - 1}px)` : `calc(${leftPct}% + 1.5px)`,
+                width: isTransfer ? (isOneTime ? 0 : `calc(${widthPct}% - 3px)`) : `calc(${Math.max(widthPct, 0.5)}% - 3px)`,
+                minWidth: isTransfer ? `${minCompactWidth - 2}px` : undefined,
+                top,
+                height: h,
+                background: isTransfer ? "transparent" : srcColor,
+                opacity: isTransfer ? 0.6 : 0.85,
+                overflow: "hidden",
+                zIndex: 2,
+              }}
+              onClick={() => onSelectItem(id, type)}
+              onMouseDown={e => handleDrag(e, id, type, "body", dragStart, dragEnd)}
+            >
+              {isTransfer && (
+                <>
+                  {/* Left (src) section */}
+                  <div style={{
+                    position: "absolute",
+                    left: 0, top: 0, bottom: 0,
+                    width: `calc(50% + ${(arrowTip - 2) / 2}px)`,
+                    background: srcColor,
+                    clipPath: `polygon(0% 0%, calc(100% - ${arrowTip}px) 0%, 100% 50%, calc(100% - ${arrowTip}px) 100%, 0% 100%)`,
+                    pointerEvents: "none",
+                  }} />
+                  {/* Right (tgt) section */}
+                  <div style={{
+                    position: "absolute",
+                    left: `calc(50% - ${(arrowTip + 2) / 2}px)`,
+                    right: 0, top: 0, bottom: 0,
+                    background: tgtColor,
+                    clipPath: `polygon(2px 0%, 100% 0%, 100% 100%, 2px 100%, ${arrowTip + 2}px 50%, 2px 0%)`,
+                    pointerEvents: "none",
+                  }} />
+                </>
+              )}
+              {!isOneTime && widthPct > 5 && (
+                <span className={`text-xs text-white truncate px-2 pointer-events-none ${!isTransfer ? "font-bold" : ""}`} style={{ position: "relative", zIndex: 1 }}>{nameMap[id]}</span>
+              )}
+              {isTransfer && !isOneTime && widthPct > 5 && tgtName && (
+                <span className="absolute right-2 text-xs text-white pointer-events-none" style={{ zIndex: 1 }}>{tgtName}</span>
+              )}
+              {/* Handles */}
+              {!isOneTime && (
+                <>
                   <div
-                    className={`absolute right-0 top-0 bottom-0 w-2 ${endSnapped ? "cursor-not-allowed opacity-40" : "cursor-ew-resize"}`}
-                    onMouseDown={e => { e.stopPropagation(); if (!endSnapped) handleDrag(e, id, type, "right", dragStart, dragEnd); }}
-                  />
-                )}
-              </>
-            )}
-          </div>
-        );
-      })}
+                    data-edge-id={`${id}-start`}
+                    className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize"
+                    style={{ overflow: "visible" }}
+                    onMouseDown={e => { e.stopPropagation(); handleDrag(e, id, type, "left", dragStart, dragEnd); }}
+                  >
+                    {startAnchored && (
+                      <div
+                        className="pointer-events-none absolute"
+                        style={{
+                          width: 4, height: 4,
+                          background: "white",
+                          borderRadius: "50%",
+                          top: "50%",
+                          left: "50%",
+                          transform: "translate(-50%, -50%)",
+                          zIndex: 10,
+                          boxShadow: "0 0 0 1px rgba(0,0,0,0.4)",
+                        }}
+                      />
+                    )}
+                  </div>
+                  {(type === "transfer" && transfer?.endDate !== null) && (
+                    <div
+                      data-edge-id={`${id}-end`}
+                      className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize"
+                      style={{ overflow: "visible" }}
+                      onMouseDown={e => { e.stopPropagation(); handleDrag(e, id, type, "right", dragStart, dragEnd); }}
+                    >
+                      {endAnchored && (
+                        <div
+                          className="pointer-events-none absolute"
+                          style={{
+                            width: 4, height: 4,
+                            background: "white",
+                            borderRadius: "50%",
+                            top: "50%",
+                            left: "50%",
+                            transform: "translate(-50%, -50%)",
+                            zIndex: 10,
+                            boxShadow: "0 0 0 1px rgba(0,0,0,0.4)",
+                          }}
+                        />
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

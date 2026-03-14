@@ -1,45 +1,16 @@
-import type { Transfer, Account, DateSnap, AccountDateSnap } from "../types";
+import type { Transfer, Account } from "../types";
 
-function resolveSnap(
-  snap: DateSnap,
-  transfer: Transfer,
-  accounts: Account[],
-): string | null {
-  const src = accounts.find(a => a.id === transfer.sourceAccountId);
-  const tgt = accounts.find(a => a.id === transfer.targetAccountId);
-  switch (snap) {
-    case "source-start": return src?.startDate ?? null;
-    case "target-start": return tgt?.startDate ?? null;
-  }
-}
-
-/** Returns the effective startDate for a transfer, respecting any snap. */
-export function resolvedStartDate(transfer: Transfer, accounts: Account[]): string {
-  if (transfer.startSnap) {
-    return resolveSnap(transfer.startSnap, transfer, accounts) ?? transfer.startDate;
-  }
+/** Returns the effective startDate for a transfer. */
+export function resolvedStartDate(transfer: Transfer, _accounts: Account[]): string {
   return transfer.startDate;
 }
 
-/** Returns the effective endDate for a transfer, respecting any snap. */
-export function resolvedEndDate(transfer: Transfer, accounts: Account[]): string | null {
-  if (transfer.endSnap) {
-    return resolveSnap(transfer.endSnap, transfer, accounts) ?? transfer.endDate;
-  }
+/** Returns the effective endDate for a transfer. */
+export function resolvedEndDate(transfer: Transfer, _accounts: Account[]): string | null {
   return transfer.endDate;
 }
 
-export const SNAP_LABELS: Record<DateSnap, string> = {
-  "source-start": "Source account start",
-  "target-start": "Target account start",
-};
-
-/** Returns the effective startDate for an account, respecting any snap. */
-export function resolvedAccountStartDate(account: Account, timelineStart: string): string {
-  if (account.startSnap === "timeline-start") return timelineStart;
+/** Returns the effective startDate for an account. */
+export function resolvedAccountStartDate(account: Account, _timelineStart: string): string {
   return account.startDate;
 }
-
-export const ACCOUNT_SNAP_LABELS: Record<AccountDateSnap, string> = {
-  "timeline-start": "Timeline start",
-};

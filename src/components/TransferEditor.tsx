@@ -1,7 +1,6 @@
 import { useCallback } from "react";
-import type { Transfer, Account, DateSnap } from "../types";
+import type { Transfer, Account } from "../types";
 import { useScenarioStore } from "../store/scenario";
-import { resolvedStartDate, resolvedEndDate, SNAP_LABELS } from "../utils/snapDates";
 
 const PERIODS = ["monthly", "quarterly", "half-yearly", "yearly"] as const;
 const AMOUNT_TYPES = ["fixed", "percent-balance", "gains-only"] as const;
@@ -70,14 +69,14 @@ export function TransferEditor({ transfer, accounts }: Props) {
         </select>
       </Field>
 
-      <DateField
-        label="Start Date"
-        literalValue={transfer.startDate}
-        snap={transfer.startSnap ?? null}
-        resolvedValue={resolvedStartDate(transfer, accounts)}
-        onLiteralChange={v => update("startDate", v)}
-        onSnapChange={v => updateTransfer(transfer.id, { startSnap: v })}
-      />
+      <Field label="Start Date">
+        <input
+          type="month"
+          value={transfer.startDate}
+          onChange={e => update("startDate", e.target.value)}
+          className="input"
+        />
+      </Field>
 
       <div>
         <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">One-time Event</label>
@@ -87,15 +86,14 @@ export function TransferEditor({ transfer, accounts }: Props) {
 
       {!transfer.isOneTime && (
         <>
-          <DateField
-            label="End Date"
-            literalValue={transfer.endDate ?? ""}
-            snap={transfer.endSnap ?? null}
-            resolvedValue={resolvedEndDate(transfer, accounts) ?? ""}
-            onLiteralChange={v => update("endDate", v || null)}
-            onSnapChange={v => updateTransfer(transfer.id, { endSnap: v })}
-            allowEmpty
-          />
+          <Field label="End Date">
+            <input
+              type="month"
+              value={transfer.endDate ?? ""}
+              onChange={e => update("endDate", e.target.value || null)}
+              className="input"
+            />
+          </Field>
           <Field label="Period">
             <select value={transfer.period} onChange={e => update("period", e.target.value as Transfer["period"])} className="input">
               {PERIODS.map(p => <option key={p} value={p}>{p}</option>)}
@@ -167,51 +165,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</label>
       {children}
-    </div>
-  );
-}
-
-function DateField({
-  label,
-  literalValue,
-  snap,
-  resolvedValue,
-  onLiteralChange,
-  onSnapChange,
-}: {
-  label: string;
-  literalValue: string;
-  snap: DateSnap | null;
-  resolvedValue: string;
-  onLiteralChange: (v: string) => void;
-  onSnapChange: (v: DateSnap | null) => void;
-  allowEmpty?: boolean;
-}) {
-  return (
-    <div>
-      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</label>
-      <select
-        value={snap ?? ""}
-        onChange={e => onSnapChange((e.target.value as DateSnap) || null)}
-        className="input mb-1"
-      >
-        <option value="">Fixed date</option>
-        {(Object.keys(SNAP_LABELS) as DateSnap[]).map(k => (
-          <option key={k} value={k}>{SNAP_LABELS[k]}</option>
-        ))}
-      </select>
-      {snap ? (
-        <p className="text-xs text-gray-400 dark:text-gray-500 pl-1">
-          Resolves to: <span className="font-medium text-gray-600 dark:text-gray-300">{resolvedValue || "—"}</span>
-        </p>
-      ) : (
-        <input
-          type="month"
-          value={literalValue}
-          onChange={e => onLiteralChange(e.target.value)}
-          className="input"
-        />
-      )}
     </div>
   );
 }

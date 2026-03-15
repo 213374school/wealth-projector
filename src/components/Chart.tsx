@@ -15,9 +15,10 @@ interface ChartProps {
   viewportEnd: number;
   hoveredIdx: number | null;
   onHoverIdx: (idx: number | null) => void;
+  hoveredAnchorId: string | null;
 }
 
-export function Chart({ result, accounts, scenario, visibleAccounts, viewportStart, viewportEnd, hoveredIdx, onHoverIdx }: ChartProps) {
+export function Chart({ result, accounts, scenario, visibleAccounts, viewportStart, viewportEnd, hoveredIdx, onHoverIdx, hoveredAnchorId }: ChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const layoutRef = useRef<{ marginLeft: number; marginTop: number; innerHeight: number; step: number } | null>(null);
@@ -199,8 +200,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
     }
 
     // Anchor lines (non-fixed only)
-    for (const anchor of (scenario.anchors ?? []).filter(a => !a.fixed)) {
-      if (!months.includes(anchor.date)) continue;
+    for (const anchor of (scenario.anchors ?? []).filter(a => !a.fixed && months.includes(a.date))) {
       const ax = xScale(anchor.date) ?? 0;
       g.append("line")
         .attr("x1", ax).attr("x2", ax)

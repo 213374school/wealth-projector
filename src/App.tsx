@@ -5,6 +5,8 @@ import { Timeline } from "./components/Timeline";
 import { EditorPanel } from "./components/EditorPanel";
 import { Settings } from "./components/Settings";
 import { Legend } from "./components/Legend";
+import { monthsBetween } from "./utils/anchors";
+import { monthToLabel } from "./utils/formatting";
 import type { Account } from "./types";
 
 type Theme = "light" | "dark";
@@ -41,6 +43,7 @@ export default function App() {
   const [showAddTransfer, setShowAddTransfer] = useState(false);
   const [visibleAccounts, setVisibleAccounts] = useState<Set<string>>(new Set());
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [hoveredAnchorId, setHoveredAnchorId] = useState<string | null>(null);
   const [viewportStart, setViewportStart] = useState(0);
   const [viewportEnd, setViewportEnd] = useState(0);
   const chartAreaRef = useRef<HTMLDivElement>(null);
@@ -287,8 +290,67 @@ export default function App() {
               viewportEnd={safeViewportEnd}
               hoveredIdx={hoveredIdx}
               onHoverIdx={setHoveredIdx}
+              hoveredAnchorId={hoveredAnchorId}
             />
           </div>
+
+          {/* Anchor labels strip — fixed below chart, aligned to chart x-axis */}
+          {(() => {
+            const anchors = (scenario.anchors ?? []).filter(a => !a.fixed);
+            const viewMonths = safeViewportEnd - safeViewportStart + 1;
+
+            // Compute pct positions
+            const positioned = anchors.flatMap(anchor => {
+              const monthIdx = monthsBetween(scenario.timelineStart, anchor.date) - safeViewportStart;
+              if (monthIdx < 0 || monthIdx > viewMonths - 1) return [];
+              return [{ anchor, pct: (monthIdx / (viewMonths - 1)) * 100 }];
+            });
+
+            // Crowding: hide labels whose nearest neighbour is within MIN_PCT of total viewport
+            const MIN_LABEL_PX = 80;
+            const innerWidth = (chartAreaRef.current?.clientWidth ?? 800) - CHART_MARGIN.left - CHART_MARGIN.right;
+            const minPct = (MIN_LABEL_PX / innerWidth) * 100;
+            const crowded = new Set<string>();
+            for (let i = 0; i < positioned.length; i++) {
+              for (let j = i + 1; j < positioned.length; j++) {
+                if (Math.abs(positioned[j].pct - positioned[i].pct) < minPct) {
+                  crowded.add(positioned[i].anchor.id);
+                  crowded.add(positioned[j].anchor.id);
+                }
+              }
+            }
+
+            if (positioned.length === 0) return null;
+            return (
+              <div
+                className="flex-shrink-0 select-none"
+                style={{ height: 20, paddingLeft: CHART_MARGIN.left, paddingRight: CHART_MARGIN.right }}
+              >
+                {/* Inner div is the positioning reference — matches chart inner width exactly */}
+                <div className="relative h-full">
+                {positioned.map(({ anchor, pct }) => {
+                  const isHovered = anchor.id === hoveredAnchorId;
+                  if (crowded.has(anchor.id) && !isHovered) return null;
+                  return (
+                    <div
+                      key={anchor.id}
+                      className="absolute -translate-x-1/2 pointer-events-none"
+                      style={{
+                        left: `${pct}%`,
+                        top: 2,
+                        fontSize: 10,
+                        whiteSpace: "nowrap",
+                        color: isHovered ? "rgba(99,202,183,1)" : "rgba(99,202,183,0.85)",
+                      }}
+                    >
+                      {monthToLabel(anchor.date)}
+                    </div>
+                  );
+                })}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Timeline */}
           <div
@@ -304,6 +366,8 @@ export default function App() {
               onSelectItem={(id, type) => selectItem(id, type)}
               hoveredIdx={hoveredIdx}
               onHoverIdx={setHoveredIdx}
+              hoveredAnchorId={hoveredAnchorId}
+              onHoverAnchorId={setHoveredAnchorId}
             />
           </div>
         </div>

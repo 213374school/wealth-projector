@@ -26,13 +26,15 @@ interface TimelineProps {
   onSelectItem: (id: string, type: "account" | "transfer") => void;
   hoveredIdx: number | null;
   onHoverIdx: (idx: number | null) => void;
+  hoveredAnchorId: string | null;
+  onHoverAnchorId: (id: string | null) => void;
 }
 
 type DragTarget =
   | { type: "anchor"; anchor: TimeAnchor }
   | { type: "edge"; itemId: string; edge: EdgeId; existingAnchorId: string | null };
 
-export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd, onSelectItem, hoveredIdx, onHoverIdx }: TimelineProps) {
+export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd, onSelectItem, hoveredIdx, onHoverIdx, hoveredAnchorId, onHoverAnchorId }: TimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingAnchorRef = useRef(false);
   const applyDragUpdate = useScenarioStore(s => s.applyDragUpdate);
@@ -173,7 +175,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
-  }, [viewMonths, scenario, applyDragUpdate, anchors, onHoverIdx]);
+  }, [viewMonths, scenario, applyDragUpdate, anchors, onHoverIdx, onHoverAnchorId]);
 
   const handleDrag = useCallback((
     e: React.MouseEvent,
@@ -190,6 +192,13 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     const startX = e.clientX;
 
     const draggedEdge: EdgeId = part === "right" ? "end" : "start";
+
+    // Highlight the anchor label for the dragged edge/body
+    if (part !== "body") {
+      onHoverAnchorId(findAnchorForEdge(anchors, id, draggedEdge)?.id ?? null);
+    } else {
+      onHoverAnchorId(findAnchorForEdge(anchors, id, "start")?.id ?? null);
+    }
 
     // Minimum start for this item
     const itemMinStart = getItemMinStart(scenario, id);
@@ -285,6 +294,8 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           ownAnchorUpdates = [];
         }
         applyDragUpdate(accountUpdates, transferUpdates, [], ownAnchorUpdates);
+        // Keep hovered anchor ID current (may have switched to a temp anchor)
+        onHoverAnchorId(tempAnchorIdRef.current ?? findAnchorForEdge(anchors, id, draggedEdge)?.id ?? null);
       } else {
         // --- Body drag: move this item only ---
         const currentStart = resolveEdgeDate(scenario, id, "start");
@@ -346,6 +357,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
       clearHighlight();
+      onHoverAnchorId(null);
 
       if (!hasDragged) return;
 
@@ -525,19 +537,14 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
               className={`absolute top-0 bottom-0 ${isFixed ? "cursor-default" : "cursor-ew-resize"}`}
               style={{ left: `${pct}%`, width: 9, transform: "translateX(-4px)", zIndex: 1 }}
               onMouseDown={isFixed ? undefined : e => handleAnchorDrag(e, anchor)}
+              onMouseEnter={() => onHoverAnchorId(anchor.id)}
+              onMouseLeave={() => onHoverAnchorId(null)}
             >
               {/* 1px visual line centered in hit area */}
               <div
                 className="absolute inset-y-0 pointer-events-none"
                 style={{ left: 3.5, width: 1, background: lineColor }}
               />
-              {/* date label */}
-              <div
-                className="absolute pointer-events-none"
-                style={{ top: 2, left: anchor.id === FIXED_END_ID ? "auto" : 6, right: anchor.id === FIXED_END_ID ? 6 : "auto", fontSize: 9, color: labelColor, whiteSpace: "nowrap" }}
-              >
-                {monthToLabel(anchor.date)}
-              </div>
             </div>
           );
         })}

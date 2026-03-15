@@ -593,7 +593,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
               onMouseDown={dragStart !== null ? e => handleDrag(e, id, type, "body", dragStart, dragEnd) : undefined}
             >
               {!isTransfer && (
-                <div style={{ position: "absolute", inset: 0, background: srcColor, opacity: 0.85, pointerEvents: "none" }} />
+                <div style={{ position: "absolute", inset: 0, background: srcColor, pointerEvents: "none" }} />
               )}
               {isTransfer && (
                 <>
@@ -603,7 +603,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
                     left: 0, top: 0, bottom: 0,
                     width: `calc(50% + ${(arrowTip - 2) / 2}px)`,
                     background: srcColor,
-                    opacity: 0.6,
+                    opacity: 0.85,
                     clipPath: `polygon(0% 0%, calc(100% - ${arrowTip}px) 0%, 100% 50%, calc(100% - ${arrowTip}px) 100%, 0% 100%)`,
                     pointerEvents: "none",
                   }} />
@@ -613,7 +613,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
                     left: `calc(50% - ${(arrowTip + 2) / 2}px)`,
                     right: 0, top: 0, bottom: 0,
                     background: tgtColor,
-                    opacity: 0.6,
+                    opacity: 0.85,
                     clipPath: `polygon(2px 0%, 100% 0%, 100% 100%, 2px 100%, ${arrowTip + 2}px 50%, 2px 0%)`,
                     pointerEvents: "none",
                   }} />

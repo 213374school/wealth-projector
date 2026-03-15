@@ -1,6 +1,11 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import type { Account } from "../types";
 import { useScenarioStore } from "../store/scenario";
+
+const PRESET_COLORS = [
+  "#4f46e5", "#0891b2", "#059669", "#d97706",
+  "#dc2626", "#7c3aed", "#db2777", "#0284c7",
+];
 
 const PERIODS = ["monthly", "quarterly", "half-yearly", "yearly"] as const;
 
@@ -9,6 +14,8 @@ interface Props {
 }
 
 export function AccountEditor({ account }: Props) {
+  const isCustomColor = !PRESET_COLORS.includes(account.color);
+  const [showCustom, setShowCustom] = useState(isCustomColor);
   const updateAccount = useScenarioStore(s => s.updateAccount);
   const deleteAccount = useScenarioStore(s => s.deleteAccount);
   const transfers = useScenarioStore(s =>
@@ -47,12 +54,38 @@ export function AccountEditor({ account }: Props) {
       </Field>
 
       <Field label="Color">
-        <input
-          type="color"
-          value={account.color}
-          onChange={e => update("color", e.target.value)}
-          className="h-8 w-16 rounded cursor-pointer border border-gray-300 dark:border-gray-600"
-        />
+        <div className="flex flex-wrap gap-2 items-center">
+          {PRESET_COLORS.map(c => (
+            <button
+              key={c}
+              onClick={() => { update("color", c); setShowCustom(false); }}
+              className="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110"
+              style={{
+                background: c,
+                borderColor: account.color === c && !showCustom ? "white" : "transparent",
+                outline: account.color === c && !showCustom ? `2px solid ${c}` : "none",
+              }}
+            />
+          ))}
+          <button
+            onClick={() => setShowCustom(v => !v)}
+            className={`px-2 py-0.5 text-xs rounded border transition-colors ${
+              showCustom
+                ? "bg-gray-200 dark:bg-gray-600 border-gray-400 dark:border-gray-500 text-gray-900 dark:text-gray-100"
+                : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+            }`}
+          >
+            Other
+          </button>
+        </div>
+        {showCustom && (
+          <input
+            type="color"
+            value={account.color}
+            onChange={e => update("color", e.target.value)}
+            className="mt-2 h-8 w-16 rounded cursor-pointer border border-gray-300 dark:border-gray-600"
+          />
+        )}
       </Field>
 
       <Field label="Initial Balance">

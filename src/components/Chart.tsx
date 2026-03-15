@@ -145,7 +145,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       g.append("path")
         .datum(layer)
         .attr("fill", colorMap[accId] ?? "#999")
-        .attr("fill-opacity", 0.7)
+        .attr("fill-opacity", 0.9)
         .attr("d", area);
     }
 
@@ -155,7 +155,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       g.append("path")
         .datum(layer)
         .attr("fill", colorMap[accId] ?? "#999")
-        .attr("fill-opacity", 0.7)
+        .attr("fill-opacity", 0.9)
         .attr("d", area);
     }
 

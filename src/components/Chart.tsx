@@ -16,9 +16,11 @@ interface ChartProps {
   hoveredIdx: number | null;
   onHoverIdx: (idx: number | null) => void;
   hoveredAnchorId: string | null;
+  selectedItemId?: string | null;
+  onSelectItem?: (id: string | null, type: "account" | "transfer" | null) => void;
 }
 
-export function Chart({ result, accounts, scenario, visibleAccounts, viewportStart, viewportEnd, hoveredIdx, onHoverIdx, hoveredAnchorId }: ChartProps) {
+export function Chart({ result, accounts, scenario, visibleAccounts, viewportStart, viewportEnd, hoveredIdx, onHoverIdx, hoveredAnchorId, selectedItemId, onSelectItem }: ChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const layoutRef = useRef<{ marginLeft: number; marginTop: number; innerHeight: number; step: number } | null>(null);
@@ -140,23 +142,27 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
 
     const colorMap = Object.fromEntries(accounts.map(a => [a.id, a.color]));
 
+    const hasSelection = selectedItemId != null && visibleAccList.some(a => a.id === selectedItemId);
+
     // Draw positive layers
     for (const layer of posLayers) {
       const accId = layer.key;
+      const isSelected = accId === selectedItemId;
       g.append("path")
         .datum(layer)
         .attr("fill", colorMap[accId] ?? "#999")
-        .attr("fill-opacity", 0.9)
+        .attr("fill-opacity", hasSelection && !isSelected ? 0.35 : 0.9)
         .attr("d", area);
     }
 
     // Draw negative layers
     for (const layer of negLayers) {
       const accId = layer.key;
+      const isSelected = accId === selectedItemId;
       g.append("path")
         .datum(layer)
         .attr("fill", colorMap[accId] ?? "#999")
-        .attr("fill-opacity", 0.9)
+        .attr("fill-opacity", hasSelection && !isSelected ? 0.35 : 0.9)
         .attr("d", area);
     }
 
@@ -316,7 +322,46 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       tooltip.style("display", "none");
     });
 
-  }, [result, accounts, visibleAccounts, viewportStart, viewportEnd, scenario, onHoverIdx]);
+    overlay.on("click", (event: MouseEvent) => {
+      if (!onSelectItem) return;
+      const [mx, my] = d3.pointer(event);
+      const domain = xScale.domain();
+      const step = width / (domain.length - 1 || 1);
+      const clampedIdx = Math.max(0, Math.min(Math.round(mx / step), domain.length - 1));
+
+      // Check positive layers top-to-bottom (last drawn is on top visually)
+      for (let li = posLayers.length - 1; li >= 0; li--) {
+        const layer = posLayers[li];
+        const point = layer[clampedIdx];
+        if (!point) continue;
+        const yTop = yScale(point[1]);
+        const yBot = yScale(point[0]);
+        if (my >= yTop && my <= yBot && point[1] !== point[0]) {
+          const newId = layer.key === selectedItemId ? null : layer.key;
+          onSelectItem(newId, newId ? "account" : null);
+          return;
+        }
+      }
+
+      // Check negative layers top-to-bottom
+      for (let li = negLayers.length - 1; li >= 0; li--) {
+        const layer = negLayers[li];
+        const point = layer[clampedIdx];
+        if (!point) continue;
+        const yTop = yScale(point[1]);
+        const yBot = yScale(point[0]);
+        if (my >= yTop && my <= yBot && point[1] !== point[0]) {
+          const newId = layer.key === selectedItemId ? null : layer.key;
+          onSelectItem(newId, newId ? "account" : null);
+          return;
+        }
+      }
+
+      // Clicked outside any area — deselect
+      onSelectItem(null, null);
+    });
+
+  }, [result, accounts, visibleAccounts, viewportStart, viewportEnd, scenario, onHoverIdx, selectedItemId, onSelectItem]);
 
   // visibleMonths is used to trigger re-render when viewport changes
   void visibleMonths;

@@ -288,6 +288,8 @@ export default function App() {
               visibleAccounts={visibleAccounts}
               viewportStart={safeViewportStart}
               viewportEnd={safeViewportEnd}
+              selectedItemId={selectedItemId}
+              onSelectItem={selectItem}
               hoveredIdx={hoveredIdx}
               onHoverIdx={setHoveredIdx}
               hoveredAnchorId={hoveredAnchorId}

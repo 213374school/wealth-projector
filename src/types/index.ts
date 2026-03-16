@@ -18,8 +18,8 @@ export interface Transfer {
   name: string;
   sourceAccountId: string | null;
   targetAccountId: string | null;
-  startDate: string;        // YYYY-MM
-  endDate: string | null;   // YYYY-MM
+  startDate: string | null; // YYYY-MM, null = simulation start
+  endDate: string | null;   // YYYY-MM, null = simulation end
   isOneTime: boolean;
   amount: number;
   amountType: AmountType;

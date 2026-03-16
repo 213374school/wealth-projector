@@ -75,9 +75,9 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
   const contribGroup: LaneEntry[] = [];
   for (const t of scenario.transfers) {
     if (t.sourceAccountId !== null) continue;
-    const tStart = t.startDate;
+    const tStart = t.startDate ?? scenario.timelineStart;
     const tEnd = t.endDate ?? scenario.timelineEnd;
-    const tEndForLane = t.endDate ?? t.startDate; // one-time events occupy only their start point for stacking
+    const tEndForLane = t.isOneTime ? tStart : tEnd; // one-time events occupy only their start point for stacking
     const localLane = assignLaneIn(contribGroup, tStart, tEndForLane);
     contribGroup.push({ start: tStart, end: tEndForLane, lane: localLane });
     lanes.push({ id: t.id, type: "transfer", start: tStart, end: tEnd, lane: nextLane + localLane });
@@ -96,9 +96,9 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     const transferGroup: LaneEntry[] = [];
     for (const t of scenario.transfers) {
       if (t.sourceAccountId !== acc.id) continue;
-      const tStart = t.startDate;
+      const tStart = t.startDate ?? scenario.timelineStart;
       const tEnd = t.endDate ?? scenario.timelineEnd;
-      const tEndForLane = t.endDate ?? t.startDate; // one-time events occupy only their start point for stacking
+      const tEndForLane = t.isOneTime ? tStart : tEnd; // one-time events occupy only their start point for stacking
       const localLane = assignLaneIn(transferGroup, tStart, tEndForLane);
       transferGroup.push({ start: tStart, end: tEndForLane, lane: localLane });
       lanes.push({ id: t.id, type: "transfer", start: tStart, end: tEnd, lane: nextLane + 1 + localLane });
@@ -170,8 +170,15 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         } else {
           const t = scenario.transfers.find(t => t.id === edge.itemId);
           if (t) {
-            if (edge.edge === "start") transferUpdates.push({ id: edge.itemId, changes: { startDate: clamped } });
-            else transferUpdates.push({ id: edge.itemId, changes: { endDate: clamped } });
+            if (edge.edge === "start") {
+              // Don't overwrite null startDate when dragging to the effective same position
+              const effectiveStart = t.startDate ?? scenario.timelineStart;
+              if (t.startDate !== null || clamped !== effectiveStart) {
+                transferUpdates.push({ id: edge.itemId, changes: { startDate: clamped } });
+              }
+            } else {
+              transferUpdates.push({ id: edge.itemId, changes: { endDate: clamped } });
+            }
           }
         }
       }
@@ -342,7 +349,11 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           const t = scenario.transfers.find(t => t.id === id);
           if (t) {
             const newStart = addMonths(resolveEdgeDate(scenario, id, "start"), delta);
-            const changes: Partial<import("../types").Transfer> = { startDate: newStart };
+            const changes: Partial<import("../types").Transfer> = {};
+            // Only concretize null startDate when actually moving; keep null when delta=0
+            if (t.startDate !== null || delta !== 0) {
+              changes.startDate = newStart;
+            }
             if (t.endDate !== null) {
               changes.endDate = addMonths(t.endDate, delta);
             }
@@ -749,7 +760,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           const top = lane * laneHeight + 2 + labelHeight;
 
 // For drag: only transfers are draggable
-          const dragStart = transfer ? transfer.startDate : null;
+          const dragStart = transfer ? (transfer.startDate ?? scenario.timelineStart) : null;
           const dragEnd = transfer ? transfer.endDate : null;
 
           const isTransfer = type === "transfer" && !!transfer;
@@ -856,13 +867,14 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         let monthStr: string;
         let monthIdx: number;
         if (t.isOneTime) {
-          monthStr = t.startDate;
+          monthStr = t.startDate ?? scenario.timelineStart;
           monthIdx = Math.max(0, simulationResult.months.indexOf(monthStr));
         } else {
           if (hoveredIdx === null) return null;
           monthStr = simulationResult.months[hoveredIdx];
           if (!monthStr) return null;
-          const inRange = monthStr >= t.startDate && (t.endDate === null || monthStr <= t.endDate);
+          const effectiveStart = t.startDate ?? scenario.timelineStart;
+          const inRange = monthStr >= effectiveStart && (t.endDate === null || monthStr <= t.endDate);
           if (!inRange) return null;
           monthIdx = hoveredIdx;
         }

@@ -97,7 +97,7 @@ function ensureSingleEdgeAnchors(scenario: Scenario): Scenario {
   const newAnchors: TimeAnchor[] = [];
   for (const t of scenario.transfers) {
     if (!covered.has(`${t.id}:start`))
-      newAnchors.push({ id: generateId(), date: t.startDate, edges: [{ itemId: t.id, edge: "start" }] });
+      newAnchors.push({ id: generateId(), date: t.startDate ?? scenario.timelineStart, edges: [{ itemId: t.id, edge: "start" }] });
     if (t.endDate !== null && !covered.has(`${t.id}:end`))
       newAnchors.push({ id: generateId(), date: t.endDate, edges: [{ itemId: t.id, edge: "end" }] });
   }

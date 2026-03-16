@@ -201,17 +201,17 @@ export function runSimulation(scenario: Scenario): SimulationResult {
 }
 
 function isTransferActive(t: Transfer, M: string, accounts: Account[], timelineStart: string): boolean {
-  const startDate = t.startDate;
+  const effectiveStart = t.startDate ?? timelineStart;
   const endDate = t.endDate;
 
-  if (M < startDate) return false;
+  if (M < effectiveStart) return false;
   if (endDate !== null && M > endDate) return false;
-  if (t.isOneTime && M !== startDate) return false;
+  if (t.isOneTime && M !== effectiveStart) return false;
 
   // Check recurrence
   if (!t.isOneTime) {
     const N = periodToMonths(t.period);
-    const diff = monthsBetween(startDate, M);
+    const diff = monthsBetween(effectiveStart, M);
     if (diff % N !== 0) return false;
   }
 

@@ -83,7 +83,9 @@ function validateTransfer(data: unknown, accountIds: Set<string>): ValidationRes
   if (d["targetAccountId"] !== null && (typeof d["targetAccountId"] !== "string" || !accountIds.has(d["targetAccountId"] as string))) {
     return { valid: false, error: `Transfer references unknown targetAccountId: ${d["targetAccountId"]}` };
   }
-  if (!isValidYYYYMM(d["startDate"] as string)) return { valid: false, error: "Transfer startDate must be YYYY-MM" };
+  if (d["startDate"] !== null && (typeof d["startDate"] !== "string" || !isValidYYYYMM(d["startDate"] as string))) {
+    return { valid: false, error: "Transfer startDate must be YYYY-MM or null" };
+  }
   if (d["endDate"] !== null && (typeof d["endDate"] !== "string" || !isValidYYYYMM(d["endDate"] as string))) {
     return { valid: false, error: "Transfer endDate must be YYYY-MM or null" };
   }

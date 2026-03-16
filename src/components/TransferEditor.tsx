@@ -16,6 +16,12 @@ export function TransferEditor({ transfer, accounts }: Props) {
   const inflationEnabled = useScenarioStore(
     s => s.activeScenarioId ? (s.scenarios[s.activeScenarioId]?.inflationEnabled ?? false) : false
   );
+  const timelineStart = useScenarioStore(
+    s => s.activeScenarioId ? (s.scenarios[s.activeScenarioId]?.timelineStart ?? "") : ""
+  );
+  const timelineEnd = useScenarioStore(
+    s => s.activeScenarioId ? (s.scenarios[s.activeScenarioId]?.timelineEnd ?? "") : ""
+  );
 
   const update = useCallback(<K extends keyof Transfer>(key: K, value: Transfer[K]) => {
     updateTransfer(transfer.id, { [key]: value });
@@ -73,12 +79,22 @@ export function TransferEditor({ transfer, accounts }: Props) {
       </Field>
 
       <Field label="Start Date">
-        <input
-          type="month"
-          value={transfer.startDate}
-          onChange={e => update("startDate", e.target.value)}
-          className="input"
-        />
+        {transfer.startDate === null ? (
+          <div className="flex items-center gap-2">
+            <span className="input flex-1 text-gray-400 dark:text-gray-500">Beginning</span>
+            <button onClick={() => update("startDate", timelineStart)} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap">Custom</button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <input
+              type="month"
+              value={transfer.startDate}
+              onChange={e => update("startDate", e.target.value || null)}
+              className="input flex-1"
+            />
+            <button onClick={() => update("startDate", null)} className="text-xs text-gray-400 dark:text-gray-500 hover:underline whitespace-nowrap">Clear</button>
+          </div>
+        )}
       </Field>
 
       <div>
@@ -90,12 +106,22 @@ export function TransferEditor({ transfer, accounts }: Props) {
       {!transfer.isOneTime && (
         <>
           <Field label="End Date">
-            <input
-              type="month"
-              value={transfer.endDate ?? ""}
-              onChange={e => update("endDate", e.target.value || null)}
-              className="input"
-            />
+            {transfer.endDate === null ? (
+              <div className="flex items-center gap-2">
+                <span className="input flex-1 text-gray-400 dark:text-gray-500">End</span>
+                <button onClick={() => update("endDate", timelineEnd)} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap">Custom</button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  type="month"
+                  value={transfer.endDate}
+                  onChange={e => update("endDate", e.target.value || null)}
+                  className="input flex-1"
+                />
+                <button onClick={() => update("endDate", null)} className="text-xs text-gray-400 dark:text-gray-500 hover:underline whitespace-nowrap">Clear</button>
+              </div>
+            )}
           </Field>
           <Field label="Period">
             <select value={transfer.period} onChange={e => update("period", e.target.value as Transfer["period"])} className="input">

@@ -22,7 +22,7 @@ export function resolveEdgeDate(scenario: Scenario, itemId: string, edge: EdgeId
   }
   const t = scenario.transfers.find(t => t.id === itemId);
   if (!t) return scenario.timelineStart;
-  if (edge === "start") return t.startDate;
+  if (edge === "start") return t.startDate ?? scenario.timelineStart;
   return t.endDate ?? scenario.timelineEnd;
 }
 

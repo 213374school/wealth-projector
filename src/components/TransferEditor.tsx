@@ -3,7 +3,19 @@ import type { Transfer, Account } from "../types";
 import { useScenarioStore } from "../store/scenario";
 
 const PERIODS = ["monthly", "quarterly", "half-yearly", "yearly"] as const;
+const PERIOD_LABELS: Record<typeof PERIODS[number], string> = {
+  "monthly": "Monthly",
+  "quarterly": "Quarterly",
+  "half-yearly": "Half-Yearly",
+  "yearly": "Yearly",
+};
+
 const AMOUNT_TYPES = ["fixed", "percent-balance", "gains-only"] as const;
+const AMOUNT_TYPE_LABELS: Record<typeof AMOUNT_TYPES[number], string> = {
+  "fixed": "Fixed",
+  "percent-balance": "% of Balance",
+  "gains-only": "Gains Only",
+};
 
 interface Props {
   transfer: Transfer;
@@ -52,36 +64,56 @@ export function TransferEditor({ transfer, accounts }: Props) {
       </Field>
 
       <Field label="Source Account">
-        <select
-          value={transfer.sourceAccountId ?? ""}
-          onChange={e => update("sourceAccountId", e.target.value || null)}
-          className="input"
-        >
-          <option value="">None (external / contribution)</option>
-          {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
+        {transfer.sourceAccountId === null ? (
+          <div className="flex items-center gap-2">
+            <span className="flex-1 text-sm text-gray-400 dark:text-gray-500">Income</span>
+            <button onClick={() => update("sourceAccountId", accounts[0]?.id ?? "")} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap">Account</button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <select
+              value={transfer.sourceAccountId}
+              onChange={e => update("sourceAccountId", e.target.value || null)}
+              className="input flex-1"
+            >
+              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+            <button onClick={() => update("sourceAccountId", null)} className="text-xs text-gray-400 dark:text-gray-500 hover:underline whitespace-nowrap">Clear</button>
+          </div>
+        )}
       </Field>
 
       <Field label="Target Account">
-        <select
-          value={transfer.targetAccountId ?? ""}
-          onChange={e => {
-            const val = e.target.value || null;
-            const updates: Partial<Transfer> = { targetAccountId: val };
-            if (val === null) { updates.taxRate = 0; updates.taxBasis = "full"; }
-            updateTransfer(transfer.id, updates);
-          }}
-          className="input"
-        >
-          <option value="">None (external / consumption)</option>
-          {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
+        {transfer.targetAccountId === null ? (
+          <div className="flex items-center gap-2">
+            <span className="flex-1 text-sm text-gray-400 dark:text-gray-500">Consumption</span>
+            <button onClick={() => update("targetAccountId", accounts[0]?.id ?? "")} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap">Account</button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <select
+              value={transfer.targetAccountId}
+              onChange={e => {
+                const val = e.target.value || null;
+                const updates: Partial<Transfer> = { targetAccountId: val };
+                if (val === null) { updates.taxRate = 0; updates.taxBasis = "full"; }
+                updateTransfer(transfer.id, updates);
+              }}
+              className="input flex-1"
+            >
+              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+            <button onClick={() => {
+              updateTransfer(transfer.id, { targetAccountId: null, taxRate: 0, taxBasis: "full" });
+            }} className="text-xs text-gray-400 dark:text-gray-500 hover:underline whitespace-nowrap">Clear</button>
+          </div>
+        )}
       </Field>
 
       <Field label="Start Date">
         {transfer.startDate === null ? (
           <div className="flex items-center gap-2">
-            <span className="input flex-1 text-gray-400 dark:text-gray-500">Beginning</span>
+            <span className="flex-1 text-sm text-gray-400 dark:text-gray-500">Beginning</span>
             <button onClick={() => update("startDate", timelineStart)} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap">Custom</button>
           </div>
         ) : (
@@ -108,7 +140,7 @@ export function TransferEditor({ transfer, accounts }: Props) {
           <Field label="End Date">
             {transfer.endDate === null ? (
               <div className="flex items-center gap-2">
-                <span className="input flex-1 text-gray-400 dark:text-gray-500">End</span>
+                <span className="flex-1 text-sm text-gray-400 dark:text-gray-500">End</span>
                 <button onClick={() => update("endDate", timelineEnd)} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap">Custom</button>
               </div>
             ) : (
@@ -125,7 +157,7 @@ export function TransferEditor({ transfer, accounts }: Props) {
           </Field>
           <Field label="Period">
             <select value={transfer.period} onChange={e => update("period", e.target.value as Transfer["period"])} className="input">
-              {PERIODS.map(p => <option key={p} value={p}>{p}</option>)}
+              {PERIODS.map(p => <option key={p} value={p}>{PERIOD_LABELS[p]}</option>)}
             </select>
           </Field>
         </>
@@ -134,7 +166,7 @@ export function TransferEditor({ transfer, accounts }: Props) {
       <Field label="Amount Type">
         <select value={transfer.amountType} onChange={e => handleAmountTypeChange(e.target.value as Transfer["amountType"])} className="input">
           {AMOUNT_TYPES.map(t => (
-            <option key={t} value={t} disabled={!hasSource && t !== "fixed"}>{t}</option>
+            <option key={t} value={t} disabled={!hasSource && t !== "fixed"}>{AMOUNT_TYPE_LABELS[t]}</option>
           ))}
         </select>
       </Field>

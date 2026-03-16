@@ -8,6 +8,12 @@ const PRESET_COLORS = [
 ];
 
 const PERIODS = ["monthly", "quarterly", "half-yearly", "yearly"] as const;
+const PERIOD_LABELS: Record<typeof PERIODS[number], string> = {
+  "monthly": "Monthly",
+  "quarterly": "Quarterly",
+  "half-yearly": "Half-Yearly",
+  "yearly": "Yearly",
+};
 
 interface Props {
   account: Account;
@@ -111,7 +117,7 @@ export function AccountEditor({ account }: Props) {
           onChange={e => update("growthPeriod", e.target.value as Account["growthPeriod"])}
           className="input"
         >
-          {PERIODS.map(p => <option key={p} value={p}>{p}</option>)}
+          {PERIODS.map(p => <option key={p} value={p}>{PERIOD_LABELS[p]}</option>)}
         </select>
       </Field>
 

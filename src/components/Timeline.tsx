@@ -14,7 +14,7 @@ import {
   addMonths,
   getItemMinStart,
 } from "../utils/anchors";
-import { monthToLabel } from "../utils/formatting";
+import { monthToLabel, formatCurrency } from "../utils/formatting";
 import { generateId } from "../utils/defaults";
 import type { EdgeId } from "../types";
 
@@ -48,6 +48,8 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     startDate: string;
     endDate: string;
   } | null>(null);
+  const [hoveredTransfer, setHoveredTransfer] = useState<{ id: string; x: number; y: number } | null>(null);
+  const simulationResult = useScenarioStore(s => s.simulationResult);
   const anchors = scenario.anchors ?? [];
 
   const viewMonths = viewportEnd - viewportStart + 1;
@@ -774,6 +776,9 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
               }}
               onClick={() => onSelectItem(id, type)}
               onMouseDown={dragStart !== null ? e => handleDrag(e, id, type, "body", dragStart, dragEnd) : undefined}
+              onMouseEnter={isTransfer ? e => setHoveredTransfer({ id, x: e.clientX, y: e.clientY }) : undefined}
+              onMouseMove={isTransfer ? e => setHoveredTransfer(h => h ? { ...h, x: e.clientX, y: e.clientY } : h) : undefined}
+              onMouseLeave={isTransfer ? () => setHoveredTransfer(null) : undefined}
             >
               {!isTransfer && (
                 <div style={{ position: "absolute", inset: 0, background: srcColor, pointerEvents: "none" }} />
@@ -833,6 +838,77 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           );
         })}
       </div>
+
+      {/* Transfer hover tooltip */}
+      {hoveredTransfer && simulationResult && (() => {
+        const t = scenario.transfers.find(tr => tr.id === hoveredTransfer.id);
+        if (!t) return null;
+
+        // One-time transfers: always show at startDate regardless of hoveredIdx.
+        // Recurring transfers: show at the hovered month, and only when it's in range.
+        let monthStr: string;
+        let monthIdx: number;
+        if (t.isOneTime) {
+          monthStr = t.startDate;
+          monthIdx = Math.max(0, simulationResult.months.indexOf(monthStr));
+        } else {
+          if (hoveredIdx === null) return null;
+          monthStr = simulationResult.months[hoveredIdx];
+          if (!monthStr) return null;
+          const inRange = monthStr >= t.startDate && (t.endDate === null || monthStr <= t.endDate);
+          if (!inRange) return null;
+          monthIdx = hoveredIdx;
+        }
+
+        const r = scenario.inflationRate;
+        const inflationOn = scenario.inflationEnabled && r !== 0;
+        const notHedged = (t.inflationHedged ?? true) === false;
+        const sym = scenario.currencySymbol;
+        const loc = scenario.currencyLocale;
+
+        let amountNominal: number | null = null;
+        let amountReal: number | null = null;
+        let amountLabel = "";
+
+        if (t.amountType === "fixed") {
+          const deflator = inflationOn ? Math.pow(1 + r, monthIdx / 12) : 1;
+          amountNominal = inflationOn && notHedged ? t.amount * deflator : t.amount;
+          amountReal = inflationOn ? amountNominal / deflator : amountNominal;
+        } else if (t.amountType === "percent-balance") {
+          amountLabel = `${(t.amount * 100).toFixed(1)}% of balance`;
+        } else {
+          amountLabel = "All gains";
+        }
+
+        const lines: string[] = [];
+        if (amountNominal !== null) {
+          if (inflationOn) {
+            lines.push(`Nominal: ${formatCurrency(amountNominal, loc, sym)}`);
+            lines.push(`Real: ${formatCurrency(amountReal!, loc, sym)}`);
+          } else {
+            lines.push(formatCurrency(amountNominal, loc, sym));
+          }
+        } else {
+          lines.push(amountLabel);
+        }
+
+        const { x, y } = hoveredTransfer;
+        return (
+          <div
+            className="pointer-events-none fixed z-50 rounded-md px-2.5 py-1.5 text-xs shadow-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900"
+            style={{ left: x + 14, top: y - 10, whiteSpace: "nowrap" }}
+          >
+            <div className="font-medium mb-0.5">{t.name}</div>
+            <div className="text-gray-500 dark:text-gray-500 text-[10px] mb-1">{monthToLabel(monthStr)}</div>
+            {lines.map((line, i) => <div key={i}>{line}</div>)}
+            {inflationOn && t.amountType === "fixed" && (
+              <div className="text-gray-400 dark:text-gray-500 text-[10px] mt-1">
+                {notHedged ? "grows with inflation" : "fixed nominal"}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

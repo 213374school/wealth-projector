@@ -52,6 +52,7 @@ export function makeDefaultTransfer(sourceId: string | null, targetId: string | 
     period: "monthly",
     taxRate: 0,
     taxBasis: "full",
+    inflationHedged: false,
   };
 }
 

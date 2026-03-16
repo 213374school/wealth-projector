@@ -85,6 +85,13 @@ export function runSimulation(scenario: Scenario): SimulationResult {
       let resolvedAmount: number;
       if (t.amountType === "fixed") {
         resolvedAmount = t.amount;
+        if (
+          scenario.inflationEnabled &&
+          scenario.inflationRate !== 0 &&
+          (t.inflationHedged ?? true) === false
+        ) {
+          resolvedAmount = t.amount * Math.pow(1 + scenario.inflationRate, i / 12);
+        }
       } else if (t.amountType === "percent-balance") {
         resolvedAmount = Math.abs(srcBal) * t.amount;
       } else {

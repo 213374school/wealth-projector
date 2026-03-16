@@ -13,6 +13,9 @@ interface Props {
 export function TransferEditor({ transfer, accounts }: Props) {
   const updateTransfer = useScenarioStore(s => s.updateTransfer);
   const deleteTransfer = useScenarioStore(s => s.deleteTransfer);
+  const inflationEnabled = useScenarioStore(
+    s => s.activeScenarioId ? (s.scenarios[s.activeScenarioId]?.inflationEnabled ?? false) : false
+  );
 
   const update = useCallback(<K extends keyof Transfer>(key: K, value: Transfer[K]) => {
     updateTransfer(transfer.id, { [key]: value });
@@ -111,7 +114,13 @@ export function TransferEditor({ transfer, accounts }: Props) {
       </Field>
 
       {!isGainsOnly && (
-        <Field label={transfer.amountType === "percent-balance" ? "Amount (% of balance)" : "Amount"}>
+        <Field label={
+          transfer.amountType === "percent-balance"
+            ? "Amount (% of balance)"
+            : (transfer.amountType === "fixed" && (transfer.inflationHedged ?? true) === false)
+              ? "Amount (today's value)"
+              : "Amount"
+        }>
           <input
             type="number"
             value={transfer.amountType === "percent-balance" ? (transfer.amount * 100).toFixed(2) : transfer.amount}
@@ -122,6 +131,19 @@ export function TransferEditor({ transfer, accounts }: Props) {
             }}
             className="input"
           />
+        </Field>
+      )}
+
+      {transfer.amountType === "fixed" && (
+        <Field label={`Inflation hedged${!inflationEnabled ? " (applies when inflation is enabled)" : ""}`}>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={transfer.inflationHedged ?? true}
+              onChange={e => update("inflationHedged", e.target.checked)}
+            />
+            Fixed nominal amount
+          </label>
         </Field>
       )}
 

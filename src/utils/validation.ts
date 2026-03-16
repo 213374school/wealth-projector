@@ -89,6 +89,9 @@ function validateTransfer(data: unknown, accountIds: Set<string>): ValidationRes
   }
   if (typeof d["amount"] !== "number") return { valid: false, error: "Transfer missing amount" };
   if (typeof d["taxRate"] !== "number") return { valid: false, error: "Transfer missing taxRate" };
+  if (d["inflationHedged"] !== undefined && typeof d["inflationHedged"] !== "boolean") {
+    return { valid: false, error: "Transfer inflationHedged must be a boolean" };
+  }
   return { valid: true };
 }
 

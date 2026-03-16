@@ -26,6 +26,7 @@ export interface Transfer {
   period: Period;
   taxRate: number;
   taxBasis: "full" | "gains-fraction";
+  inflationHedged?: boolean;   // undefined treated as true (backward compat)
   notes?: string;
 }
 

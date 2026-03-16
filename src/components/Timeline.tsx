@@ -1,4 +1,4 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useState } from "react";
 import type { Transfer, Scenario, TimeAnchor } from "../types";
 import { useScenarioStore, FIXED_END_ID } from "../store/scenario";
 import {
@@ -40,6 +40,14 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
   const applyDragUpdate = useScenarioStore(s => s.applyDragUpdate);
   const addAnchor = useScenarioStore(s => s.addAnchor);
   const updateAnchor = useScenarioStore(s => s.updateAnchor);
+  const addTransferAt = useScenarioStore(s => s.addTransferAt);
+
+  const [createDragPreview, setCreateDragPreview] = useState<{
+    sourceAccountId: string | null;
+    lane: number;
+    startDate: string;
+    endDate: string;
+  } | null>(null);
   const anchors = scenario.anchors ?? [];
 
   const viewMonths = viewportEnd - viewportStart + 1;
@@ -56,7 +64,9 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
   }
 
   let nextLane = 0;
-  const groupGap = 10 / 24; // ~10px visual gap between account groups
+
+  // Create rows — one per group (external source + each account); acts as group delimiter
+  const createRows: { sourceAccountId: string | null; lane: number }[] = [];
 
   // Contributions (null source) — own isolated group at the top
   const contribGroup: LaneEntry[] = [];
@@ -68,7 +78,10 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     contribGroup.push({ start: tStart, end: tEnd, lane: localLane });
     lanes.push({ id: t.id, type: "transfer", start: tStart, end: tEnd, lane: nextLane + localLane });
   }
-  if (contribGroup.length > 0) nextLane += Math.max(...contribGroup.map(l => l.lane)) + 1 + groupGap;
+  // External source create row — always present, acts as group separator
+  const externalCreateLane = nextLane + (contribGroup.length > 0 ? Math.max(...contribGroup.map(l => l.lane)) + 1 : 0);
+  createRows.push({ sourceAccountId: null, lane: externalCreateLane });
+  nextLane = externalCreateLane + 1;
 
   // Each account gets a dedicated lane; its transfers collapse within their own group below it
   const accountLaneMap: Record<string, number> = {};
@@ -86,10 +99,16 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
       lanes.push({ id: t.id, type: "transfer", start: tStart, end: tEnd, lane: nextLane + 1 + localLane });
     }
 
-    nextLane += 1 + (transferGroup.length > 0 ? Math.max(...transferGroup.map(l => l.lane)) + 1 : 0) + groupGap;
+    // Account create row — acts as group separator
+    const accCreateLane = nextLane + 1 + (transferGroup.length > 0 ? Math.max(...transferGroup.map(l => l.lane)) + 1 : 0);
+    createRows.push({ sourceAccountId: acc.id, lane: accCreateLane });
+    nextLane = accCreateLane + 1;
   }
 
-  const maxLane = lanes.reduce((m, l) => Math.max(m, l.lane), 0);
+  const maxLane = Math.max(
+    lanes.reduce((m, l) => Math.max(m, l.lane), 0),
+    createRows.reduce((m, r) => Math.max(m, r.lane), 0),
+  );
   const laneHeight = 24;
   const h = laneHeight - 4;         // bar height = 20px
   const arrowTip = h / 2;           // = 10px — width of the chevron point
@@ -469,6 +488,108 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     window.addEventListener("mouseup", onMouseUp);
   }, [viewMonths, scenario, applyDragUpdate, addAnchor, updateAnchor, anchors, lanes]);
 
+  const handleCreateDrag = useCallback((
+    e: React.MouseEvent,
+    sourceAccountId: string | null,
+    rowLane: number,
+  ) => {
+    e.stopPropagation();
+    const container = containerRef.current;
+    if (!container) return;
+    const containerWidth = container.clientWidth;
+    const containerLeft = container.getBoundingClientRect().left;
+    const MAGNET_THRESHOLD_PX = 15;
+
+    function xToDate(clientX: number): string {
+      const pct = Math.max(0, Math.min(1, (clientX - containerLeft) / containerWidth));
+      const monthIdx = Math.round(pct * (viewMonths - 1)) + viewportStart;
+      return addMonths(scenario.timelineStart, monthIdx);
+    }
+
+    function findSnapAnchor(date: string): TimeAnchor | null {
+      const thresholdMonths = (MAGNET_THRESHOLD_PX / containerWidth) * viewMonths;
+      return findNearestAnchor(anchors, date, null, thresholdMonths);
+    }
+
+    // Snap start date at mousedown
+    const rawStartDate = xToDate(e.clientX);
+    const startSnapAnchor = findSnapAnchor(rawStartDate);
+    const dragStartDate = startSnapAnchor ? startSnapAnchor.date : rawStartDate;
+    let snapStartAnchorId: string | null = startSnapAnchor?.id ?? null;
+
+    const startX = e.clientX;
+    let hasDragged = false;
+    const MIN_DRAG_PX = 4;
+    let dragEndDate = dragStartDate;
+    let snapEndAnchorId: string | null = null;
+    let highlightedEl: HTMLElement | null = null;
+
+    function clearHighlight() {
+      if (highlightedEl) {
+        highlightedEl.classList.remove("anchor-candidate-highlight");
+        highlightedEl = null;
+      }
+    }
+
+    function highlightAnchor(anchor: TimeAnchor) {
+      const el = document.querySelector<HTMLElement>(`[data-anchor-id="${anchor.id}"] > div:first-child`);
+      if (el) { el.classList.add("anchor-candidate-highlight"); highlightedEl = el; }
+    }
+
+    if (startSnapAnchor) highlightAnchor(startSnapAnchor);
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      if (!hasDragged && Math.abs(dx) >= MIN_DRAG_PX) hasDragged = true;
+      if (!hasDragged) return;
+
+      clearHighlight();
+      const rawEndDate = xToDate(ev.clientX);
+      const endSnapAnchor = findSnapAnchor(rawEndDate);
+
+      if (endSnapAnchor) {
+        dragEndDate = endSnapAnchor.date;
+        snapEndAnchorId = endSnapAnchor.id;
+        highlightAnchor(endSnapAnchor);
+      } else {
+        dragEndDate = rawEndDate;
+        snapEndAnchorId = null;
+      }
+
+      const previewStart = dragEndDate >= dragStartDate ? dragStartDate : dragEndDate;
+      const previewEnd = dragEndDate >= dragStartDate ? dragEndDate : dragStartDate;
+      setCreateDragPreview({ sourceAccountId, lane: rowLane, startDate: previewStart, endDate: previewEnd });
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      clearHighlight();
+      setCreateDragPreview(null);
+
+      if (!hasDragged) return;
+
+      const swapped = dragEndDate < dragStartDate;
+      const previewStart = swapped ? dragEndDate : dragStartDate;
+      const previewEnd = swapped ? dragStartDate : dragEndDate;
+
+      // After a potential swap, assign snap anchors to the correct edge
+      const finalStartAnchorId = swapped ? snapEndAnchorId : snapStartAnchorId;
+      const finalEndAnchorId = swapped ? snapStartAnchorId : snapEndAnchorId;
+
+      addTransferAt(
+        sourceAccountId,
+        previewStart,
+        previewEnd === previewStart ? null : previewEnd,
+        finalStartAnchorId,
+        previewEnd === previewStart ? null : finalEndAnchorId,
+      );
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }, [viewMonths, viewportStart, scenario.timelineStart, anchors, addTransferAt]);
+
   const nameMap = Object.fromEntries([
     ...scenario.accounts.map(a => [a.id, a.name]),
     ...scenario.transfers.map(t => [t.id, t.name]),
@@ -548,6 +669,61 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
             </div>
           );
         })}
+
+        {/* Create rows — drag here to add a new transfer from that source */}
+        {createRows.map(({ sourceAccountId, lane }) => {
+          const top = lane * laneHeight + 2 + labelHeight;
+          const srcAcc = scenario.accounts.find(a => a.id === sourceAccountId);
+          const rowColor = srcAcc?.color ?? "#6b7280";
+          return (
+            <div
+              key={`create-${sourceAccountId ?? "external"}`}
+              className="absolute group cursor-crosshair"
+              style={{ left: 0, right: 0, top, height: h, zIndex: 2 }}
+              onMouseDown={e => handleCreateDrag(e, sourceAccountId, lane)}
+            >
+              <div
+                className="absolute inset-0 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none"
+                style={{ border: `1px dashed ${rowColor}60`, background: `${rowColor}0d` }}
+              />
+              <span
+                className="absolute inset-0 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none select-none"
+                style={{ color: `${rowColor}80`, fontSize: 10 }}
+              >
+                drag to add transfer
+              </span>
+            </div>
+          );
+        })}
+
+        {/* Preview bar while drag-creating a new transfer */}
+        {createDragPreview !== null && (() => {
+          const { sourceAccountId, lane, startDate, endDate } = createDragPreview;
+          const top = lane * laneHeight + 2 + labelHeight;
+          const startIdx = Math.max(0, monthsBetween(scenario.timelineStart, startDate) - viewportStart);
+          const endIdx = Math.min(viewMonths - 1, monthsBetween(scenario.timelineStart, endDate) - viewportStart);
+          const leftPct = (startIdx / (viewMonths - 1)) * 100;
+          const rightPct = (endIdx / (viewMonths - 1)) * 100;
+          const widthPct = rightPct - leftPct;
+          const srcAcc = scenario.accounts.find(a => a.id === sourceAccountId);
+          const srcColor = srcAcc?.color ?? "#6b7280";
+          return (
+            <div
+              className="absolute rounded pointer-events-none"
+              style={{
+                left: `calc(${leftPct}% + 1.5px)`,
+                width: `calc(${widthPct}% - 3px)`,
+                minWidth: `${minCompactWidth - 2}px`,
+                top,
+                height: h,
+                background: srcColor,
+                opacity: 0.45,
+                zIndex: 3,
+                outline: `1.5px dashed ${srcColor}`,
+              }}
+            />
+          );
+        })()}
 
         {lanes.map(({ id, type, start, end, lane }) => {
           const rawStartIdx = monthsBetween(scenario.timelineStart, start) - viewportStart;

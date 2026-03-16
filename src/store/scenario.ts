@@ -29,6 +29,7 @@ interface ScenarioStore {
   deleteAccount: (id: string) => void;
 
   addTransfer: (sourceId: string | null, targetId: string | null) => void;
+  addTransferAt: (sourceId: string | null, startDate: string, endDate: string | null, snapStartAnchorId?: string | null, snapEndAnchorId?: string | null) => void;
   updateTransfer: (id: string, updates: Partial<Transfer>) => void;
   deleteTransfer: (id: string) => void;
 
@@ -282,6 +283,67 @@ export const useScenarioStore = create<ScenarioStore>()(
             transfers: [...scenario.transfers, newT],
             updatedAt: currentMonth(),
           });
+          const scenarios = { ...state.scenarios, [state.activeScenarioId]: updated };
+          return {
+            scenarios,
+            simulationResult: recompute(scenarios, state.activeScenarioId),
+            selectedItemId: newT.id,
+            selectedItemType: "transfer",
+          };
+        });
+      },
+
+      addTransferAt: (sourceId, startDate, endDate, snapStartAnchorId, snapEndAnchorId) => {
+        set(state => {
+          if (!state.activeScenarioId) return state;
+          const scenario = state.scenarios[state.activeScenarioId];
+          const newT: Transfer = {
+            id: generateId(),
+            name: "New Transfer",
+            sourceAccountId: sourceId,
+            targetAccountId: null,
+            startDate,
+            endDate,
+            isOneTime: false,
+            amount: 1000,
+            amountType: "fixed",
+            period: "monthly",
+            taxRate: 0,
+            taxBasis: "full",
+          };
+          let updated: Scenario = ensureSingleEdgeAnchors({
+            ...scenario,
+            transfers: [...scenario.transfers, newT],
+            updatedAt: currentMonth(),
+          });
+
+          // Merge edges into snapped anchors (remove the single-edge anchors just created,
+          // and add the edge to the existing anchor instead)
+          if (snapStartAnchorId || snapEndAnchorId) {
+            let anchors = updated.anchors ?? [];
+            if (snapStartAnchorId) {
+              anchors = anchors.filter(a => !(
+                !a.fixed && a.edges.length === 1 &&
+                a.edges[0].itemId === newT.id && a.edges[0].edge === "start"
+              ));
+              anchors = anchors.map(a => a.id === snapStartAnchorId
+                ? { ...a, edges: [...a.edges, { itemId: newT.id, edge: "start" as const }] }
+                : a
+              );
+            }
+            if (snapEndAnchorId && endDate !== null) {
+              anchors = anchors.filter(a => !(
+                !a.fixed && a.edges.length === 1 &&
+                a.edges[0].itemId === newT.id && a.edges[0].edge === "end"
+              ));
+              anchors = anchors.map(a => a.id === snapEndAnchorId
+                ? { ...a, edges: [...a.edges, { itemId: newT.id, edge: "end" as const }] }
+                : a
+              );
+            }
+            updated = { ...updated, anchors };
+          }
+
           const scenarios = { ...state.scenarios, [state.activeScenarioId]: updated };
           return {
             scenarios,

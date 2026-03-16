@@ -193,7 +193,8 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
       const mergeTarget = mergeTargetRef.current;
       mergeTargetRef.current = null;
-      if (mergeTarget) {
+      // Never merge into fixed anchors
+      if (mergeTarget && !mergeTarget.fixed) {
         const mergedEdges = [...mergeTarget.edges];
         for (const edge of anchor.edges) {
           if (!mergedEdges.some(e => e.itemId === edge.itemId && e.edge === edge.edge))
@@ -300,20 +301,28 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         const accountUpdates: { id: string; changes: Partial<import("../types").Account> }[] = [];
         const transferUpdates: { id: string; changes: Partial<import("../types").Transfer> }[] = [];
 
+        // When clamped to a timeline boundary, clear the date to null
+        const atBoundary = draggedEdge === "start"
+          ? clampedDate === scenario.timelineStart
+          : clampedDate === scenario.timelineEnd;
+
         if (type === "account") {
           // accounts are omnipresent — nothing to drag
         } else {
           if (draggedEdge === "start") {
-            transferUpdates.push({ id, changes: { startDate: clampedDate } });
+            transferUpdates.push({ id, changes: { startDate: atBoundary ? null : clampedDate } });
           } else {
-            transferUpdates.push({ id, changes: { endDate: clampedDate } });
+            transferUpdates.push({ id, changes: { endDate: atBoundary ? null : clampedDate } });
           }
         }
 
         // Move (or create) a single-edge anchor tracking this edge in real-time
         const ownAnchor = findAnchorForEdge(anchors, id, draggedEdge);
         let ownAnchorUpdates: TimeAnchor[];
-        if (ownAnchor && !ownAnchor.fixed && ownAnchor.edges.length === 1) {
+        if (atBoundary) {
+          // At boundary — no anchor to create; store will detach the edge automatically
+          ownAnchorUpdates = [];
+        } else if (ownAnchor && !ownAnchor.fixed && ownAnchor.edges.length === 1) {
           // Single-edge anchor: update in place
           ownAnchorUpdates = [{ ...ownAnchor, date: clampedDate }];
         } else if (hasDragged) {
@@ -350,11 +359,13 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
             const newStart = addMonths(resolveEdgeDate(scenario, id, "start"), delta);
             const changes: Partial<import("../types").Transfer> = {};
             // Only concretize null startDate when actually moving; keep null when delta=0
+            // Also clear startDate if dragged back to timeline start
             if (t.startDate !== null || delta !== 0) {
-              changes.startDate = newStart;
+              changes.startDate = newStart <= scenario.timelineStart ? null : newStart;
             }
             if (t.endDate !== null) {
-              changes.endDate = addMonths(t.endDate, delta);
+              const newEnd = addMonths(t.endDate, delta);
+              changes.endDate = newEnd > scenario.timelineEnd ? null : newEnd;
             }
             transferUpdates.push({ id, changes });
           }
@@ -365,14 +376,21 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         const anchorUpdates: TimeAnchor[] = [];
         for (const anch of anchors) {
           if (anch.fixed || !anch.edges.some(e => e.itemId === id)) continue;
+          const pendingChanges = transferUpdates[0]?.changes ?? {};
           if (anch.edges.length === 1) {
             const edgeId = anch.edges[0].edge;
+            // Don't update anchors for edges whose dates are being cleared — let detachNullDateEdges handle removal
+            if ((edgeId === "start" && pendingChanges.startDate === null) ||
+                (edgeId === "end" && pendingChanges.endDate === null)) continue;
             const newDate = edgeId === "start"
               ? addMonths(originalStart, delta)
               : (originalEnd ? addMonths(originalEnd, delta) : anch.date);
             anchorUpdates.push({ ...anch, date: newDate });
           } else if (hasDragged) {
             for (const edge of anch.edges.filter(e => e.itemId === id)) {
+              // Don't update anchors for edges whose dates are being cleared
+              if ((edge.edge === "start" && pendingChanges.startDate === null) ||
+                  (edge.edge === "end" && pendingChanges.endDate === null)) continue;
               if (!bodyTempAnchorsRef.current.has(edge.edge))
                 bodyTempAnchorsRef.current.set(edge.edge, generateId());
               const tempId = bodyTempAnchorsRef.current.get(edge.edge)!;
@@ -398,7 +416,9 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
       if (part !== "body") {
         // Handle anchor connections on mouseup
         const myAnchor = findAnchorForEdge(anchors, id, draggedEdge);
-        const snap = dragTargetRef.current;
+        // Never merge into fixed anchors — treat as free drop
+        let snap = dragTargetRef.current;
+        if (snap?.type === "anchor" && snap.anchor.fixed) snap = null;
         const tempAnchorId = tempAnchorIdRef.current;
         dragTargetRef.current = null;
         tempAnchorIdRef.current = null;
@@ -437,8 +457,11 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
           // Connect to new target
           if (snap === null) {
-            // Free drop with no temp anchor — create single-edge anchor now
-            anchorsToUpdate.push({
+            // Free drop with no temp anchor — create single-edge anchor now, unless at boundary
+            const atBoundary = draggedEdge === "start"
+              ? lastClampedDate === scenario.timelineStart
+              : lastClampedDate === scenario.timelineEnd;
+            if (!atBoundary) anchorsToUpdate.push({
               id: generateId(),
               date: lastClampedDate,
               edges: [{ itemId: id, edge: draggedEdge }],

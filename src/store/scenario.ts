@@ -80,6 +80,30 @@ function ensureFixedAnchors(scenario: Scenario): Scenario {
   return { ...scenario, anchors };
 }
 
+/** Removes edges whose transfer date was just cleared to null, deleting empty anchors. */
+function detachNullDateEdges(
+  oldTransfers: Transfer[],
+  updates: { id: string; changes: Partial<Transfer> }[],
+  anchors: TimeAnchor[],
+): TimeAnchor[] {
+  let result = anchors;
+  for (const upd of updates) {
+    const old = oldTransfers.find(t => t.id === upd.id);
+    if (!old) continue;
+    if ("startDate" in upd.changes && upd.changes.startDate === null && old.startDate !== null) {
+      result = result
+        .map(a => ({ ...a, edges: a.edges.filter(e => !(e.itemId === upd.id && e.edge === "start")) }))
+        .filter(a => a.fixed || a.edges.length >= 1);
+    }
+    if ("endDate" in upd.changes && upd.changes.endDate === null && old.endDate !== null) {
+      result = result
+        .map(a => ({ ...a, edges: a.edges.filter(e => !(e.itemId === upd.id && e.edge === "end")) }))
+        .filter(a => a.fixed || a.edges.length >= 1);
+    }
+  }
+  return result;
+}
+
 function removeAnchorsForItem(anchors: TimeAnchor[] | undefined, itemId: string): TimeAnchor[] {
   return (anchors ?? [])
     .map(a => ({ ...a, edges: a.edges.filter(e => e.itemId !== itemId) }))
@@ -96,8 +120,8 @@ function ensureSingleEdgeAnchors(scenario: Scenario): Scenario {
 
   const newAnchors: TimeAnchor[] = [];
   for (const t of scenario.transfers) {
-    if (!covered.has(`${t.id}:start`))
-      newAnchors.push({ id: generateId(), date: t.startDate ?? scenario.timelineStart, edges: [{ itemId: t.id, edge: "start" }] });
+    if (t.startDate !== null && !covered.has(`${t.id}:start`))
+      newAnchors.push({ id: generateId(), date: t.startDate, edges: [{ itemId: t.id, edge: "start" }] });
     if (t.endDate !== null && !covered.has(`${t.id}:end`))
       newAnchors.push({ id: generateId(), date: t.endDate, edges: [{ itemId: t.id, edge: "end" }] });
   }
@@ -360,14 +384,7 @@ export const useScenarioStore = create<ScenarioStore>()(
         set(state => {
           if (!state.activeScenarioId) return state;
           const scenario = state.scenarios[state.activeScenarioId];
-          // If endDate is being cleared, remove any end-edge anchors for this transfer first
-          let baseAnchors = scenario.anchors ?? [];
-          const oldTransfer = scenario.transfers.find(t => t.id === id);
-          if (oldTransfer?.endDate !== null && updates.endDate === null) {
-            baseAnchors = baseAnchors
-              .map(a => ({ ...a, edges: a.edges.filter(e => !(e.itemId === id && e.edge === "end")) }))
-              .filter(a => a.fixed || a.edges.length >= 1);
-          }
+          const baseAnchors = detachNullDateEdges(scenario.transfers, [{ id, changes: updates }], scenario.anchors ?? []);
           const transfers = scenario.transfers.map(t => t.id === id ? { ...t, ...updates } : t);
           const newScenario: Scenario = { ...scenario, transfers, anchors: baseAnchors, updatedAt: currentMonth() };
           const synced = syncAnchorDates(newScenario.anchors, newScenario);
@@ -477,6 +494,7 @@ export const useScenarioStore = create<ScenarioStore>()(
               anchors = [...anchors, updated];
             }
           }
+          anchors = detachNullDateEdges(scenario.transfers, transferUpdates, anchors);
           const scenarios = {
             ...state.scenarios,
             [state.activeScenarioId]: { ...scenario, accounts, transfers, anchors, updatedAt: currentMonth() },

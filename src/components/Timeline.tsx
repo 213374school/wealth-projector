@@ -23,7 +23,7 @@ interface TimelineProps {
   selectedItemId: string | null;
   viewportStart: number;
   viewportEnd: number;
-  onSelectItem: (id: string, type: "account" | "transfer") => void;
+  onSelectItem: (id: string | null, type: "account" | "transfer" | null) => void;
   hoveredIdx: number | null;
   onHoverIdx: (idx: number | null) => void;
   hoveredAnchorId: string | null;
@@ -622,6 +622,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
       <div
         className="relative"
         style={{ height: barsHeight }}
+        onClick={() => onSelectItem(null, null)}
         onMouseMove={e => {
           if (isDraggingAnchorRef.current) return;
           const rect = e.currentTarget.getBoundingClientRect();
@@ -744,6 +745,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           const isOneTime = (transfer as Transfer | undefined)?.isOneTime ?? false;
 
           const isSelected = id === selectedItemId;
+          const hasSelection = selectedItemId != null;
           const top = lane * laneHeight + 2 + labelHeight;
 
 // For drag: only transfers are draggable
@@ -767,7 +769,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           return (
             <div
               key={id}
-              className={`absolute flex items-center rounded cursor-pointer ${isSelected ? "outline outline-2 outline-gray-900 dark:outline-white" : ""}`}
+              className="absolute flex items-center rounded cursor-pointer"
               style={{
                 left: stuckRight ? `calc(100% - ${minCompactWidth - 1}px)` : `calc(${leftPct}% + 1.5px)`,
                 width: isTransfer ? (isOneTime ? 0 : `calc(${widthPct}% - 3px)`) : `calc(${Math.max(widthPct, 0.5)}% - 3px)`,
@@ -776,8 +778,10 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
                 height: h,
                 overflow: "hidden",
                 zIndex: 2,
+                opacity: hasSelection && !isSelected ? 0.35 : 1,
+                transition: "opacity 0.1s",
               }}
-              onClick={() => onSelectItem(id, type)}
+              onClick={e => { e.stopPropagation(); onSelectItem(id, type); }}
               onMouseDown={dragStart !== null ? e => handleDrag(e, id, type, "body", dragStart, dragEnd) : undefined}
               onMouseEnter={isTransfer ? e => setHoveredTransfer({ id, x: e.clientX, y: e.clientY }) : undefined}
               onMouseMove={isTransfer ? e => setHoveredTransfer(h => h ? { ...h, x: e.clientX, y: e.clientY } : h) : undefined}

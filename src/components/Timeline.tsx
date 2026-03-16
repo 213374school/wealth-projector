@@ -49,6 +49,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     endDate: string;
   } | null>(null);
   const [hoveredTransfer, setHoveredTransfer] = useState<{ id: string; x: number; y: number } | null>(null);
+  const tooltipDivRef = useRef<HTMLDivElement | null>(null);
   const simulationResult = useScenarioStore(s => s.simulationResult);
   const anchors = scenario.anchors ?? [];
 
@@ -893,10 +894,16 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         }
 
         const { x, y } = hoveredTransfer;
+        const tH = tooltipDivRef.current?.offsetHeight ?? 90;
         return (
           <div
+            ref={tooltipDivRef}
             className="pointer-events-none fixed z-50 rounded-md px-2.5 py-1.5 text-xs shadow-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900"
-            style={{ left: x + 14, top: y - 10, whiteSpace: "nowrap" }}
+            style={{
+              left: Math.min(x + 14, window.innerWidth - 220),
+              top: Math.min(y - 10, window.innerHeight - tH - 4),
+              whiteSpace: "nowrap",
+            }}
           >
             <div className="font-medium mb-0.5">{t.name}</div>
             <div className="text-gray-500 dark:text-gray-500 text-[10px] mb-1">{monthToLabel(monthStr)}</div>

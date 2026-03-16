@@ -302,10 +302,13 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       }
       html += `<div class="border-t mt-1 pt-1 font-semibold">Net: ${formatCurrency(total, scenario.currencyLocale, scenario.currencySymbol)}</div>`;
 
-      tooltip.style("display", "block")
-        .style("left", `${event.offsetX + margin.left + 10}px`)
-        .style("top", `${event.offsetY}px`)
-        .html(html);
+      const cursorX = mx + margin.left;
+      tooltip.style("display", "block").html(html);
+      const tW = tooltipRef.current?.offsetWidth ?? 200;
+      tooltip
+        .style("left", `${Math.min(cursorX + 10, totalWidth - tW - 4)}px`)
+        .style("right", "auto")
+        .style("top", `${event.offsetY}px`);
     });
 
     overlay.on("mouseleave", () => {

@@ -778,7 +778,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
                 height: h,
                 overflow: "hidden",
                 zIndex: 2,
-                opacity: hasSelection && !isSelected ? 0.35 : 1,
+                opacity: hasSelection && !isSelected ? 0.6 : 1,
                 transition: "opacity 0.1s",
               }}
               onClick={e => { e.stopPropagation(); onSelectItem(id, type); }}

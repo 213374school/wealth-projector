@@ -142,8 +142,6 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
 
     const colorMap = Object.fromEntries(accounts.map(a => [a.id, a.color]));
 
-    const hasSelection = selectedItemId != null && visibleAccList.some(a => a.id === selectedItemId);
-
     // Draw positive layers
     for (const layer of posLayers) {
       const accId = layer.key;
@@ -151,7 +149,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       g.append("path")
         .datum(layer)
         .attr("fill", colorMap[accId] ?? "#999")
-        .attr("fill-opacity", hasSelection && !isSelected ? 0.35 : 0.9)
+        .attr("fill-opacity", isSelected ? 1.0 : 0.9)
         .attr("d", area);
     }
 
@@ -162,7 +160,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       g.append("path")
         .datum(layer)
         .attr("fill", colorMap[accId] ?? "#999")
-        .attr("fill-opacity", hasSelection && !isSelected ? 0.35 : 0.9)
+        .attr("fill-opacity", isSelected ? 1.0 : 0.9)
         .attr("d", area);
     }
 

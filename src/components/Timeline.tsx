@@ -346,6 +346,13 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         if (newStartRaw < itemMinStart) {
           delta = monthsBetween(currentStart, itemMinStart);
         }
+        // Clamp delta: new end must be <= timelineEnd (symmetric right boundary)
+        if (originalEnd !== null) {
+          const newEndRaw = addMonths(originalEnd, delta);
+          if (newEndRaw > scenario.timelineEnd) {
+            delta = Math.min(delta, monthsBetween(originalEnd, scenario.timelineEnd));
+          }
+        }
         lastBodyDelta = delta;
 
         const accountUpdates: { id: string; changes: Partial<import("../types").Account> }[] = [];
@@ -363,9 +370,9 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
             if (t.startDate !== null || delta !== 0) {
               changes.startDate = newStart <= scenario.timelineStart ? null : newStart;
             }
-            if (t.endDate !== null) {
-              const newEnd = addMonths(t.endDate, delta);
-              changes.endDate = newEnd > scenario.timelineEnd ? null : newEnd;
+            if (t.endDate !== null || delta !== 0) {
+              const newEnd = addMonths(t.endDate ?? scenario.timelineEnd, delta);
+              changes.endDate = newEnd >= scenario.timelineEnd ? null : newEnd;
             }
             transferUpdates.push({ id, changes });
           }
@@ -783,7 +790,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
 // For drag: only transfers are draggable
           const dragStart = transfer ? (transfer.startDate ?? scenario.timelineStart) : null;
-          const dragEnd = transfer ? transfer.endDate : null;
+          const dragEnd = transfer ? (transfer.endDate ?? scenario.timelineEnd) : null;
 
           const isTransfer = type === "transfer" && !!transfer;
 
@@ -863,15 +870,13 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
                     onMouseDown={e => { e.stopPropagation(); handleDrag(e, id, type, "left", dragStart!, dragEnd); }}
                   >
                   </div>
-                  {transfer?.endDate !== null && (
-                    <div
-                      data-edge-id={`${id}-end`}
-                      className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize"
-                      style={{ overflow: "visible" }}
-                      onMouseDown={e => { e.stopPropagation(); handleDrag(e, id, type, "right", dragStart!, dragEnd); }}
-                    >
-                    </div>
-                  )}
+                  <div
+                    data-edge-id={`${id}-end`}
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize"
+                    style={{ overflow: "visible" }}
+                    onMouseDown={e => { e.stopPropagation(); handleDrag(e, id, type, "right", dragStart!, dragEnd); }}
+                  >
+                  </div>
                 </>
               )}
             </div>

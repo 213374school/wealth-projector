@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import type { Account } from "../types";
 import { useScenarioStore } from "../store/scenario";
+import { CurrencyInput } from "./CurrencyInput";
 
 const PRESET_COLORS = [
   "#7c3aed", "#0891b2", "#059669", "#d97706",
@@ -26,6 +27,12 @@ export function AccountEditor({ account }: Props) {
   const deleteAccount = useScenarioStore(s => s.deleteAccount);
   const transfers = useScenarioStore(s =>
     s.activeScenarioId ? s.scenarios[s.activeScenarioId]?.transfers ?? [] : []
+  );
+  const currencyLocale = useScenarioStore(s =>
+    s.activeScenarioId ? (s.scenarios[s.activeScenarioId]?.currencyLocale ?? "en-US") : "en-US"
+  );
+  const currencyCode = useScenarioStore(s =>
+    s.activeScenarioId ? (s.scenarios[s.activeScenarioId]?.currencySymbol ?? "USD") : "USD"
   );
 
   const update = useCallback(<K extends keyof Account>(key: K, value: Account[K]) => {
@@ -95,10 +102,11 @@ export function AccountEditor({ account }: Props) {
       </Field>
 
       <Field label="Initial Balance">
-        <input
-          type="number"
+        <CurrencyInput
           value={account.initialBalance}
-          onChange={e => update("initialBalance", parseFloat(e.target.value) || 0)}
+          locale={currencyLocale}
+          currencyCode={currencyCode}
+          onChange={v => update("initialBalance", v)}
           className="input"
         />
       </Field>

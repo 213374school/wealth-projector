@@ -23,12 +23,19 @@ export function formatCurrencyFull(value: number, locale: string, symbol: string
   }
 }
 
-function getCurrencyCode(locale: string): string {
-  const map: Record<string, string> = {
-    "en-US": "USD", "en-GB": "GBP", "sv-SE": "SEK", "de-DE": "EUR",
-    "fr-FR": "EUR", "ja-JP": "JPY", "en-AU": "AUD", "en-CA": "CAD",
+export function getCurrencyCode(locale: string): string {
+  const region = locale.split("-")[1]?.toUpperCase();
+  const regionMap: Record<string, string> = {
+    US: "USD", GB: "GBP", SE: "SEK", JP: "JPY", AU: "AUD", CA: "CAD",
+    DK: "DKK", NO: "NOK", CH: "CHF", CN: "CNY", IN: "INR", BR: "BRL",
+    MX: "MXN", KR: "KRW", SG: "SGD", HK: "HKD", NZ: "NZD", ZA: "ZAR",
+    PL: "PLN", CZ: "CZK", HU: "HUF", RU: "RUB", TR: "TRY", IL: "ILS",
+    AE: "AED", SA: "SAR", TH: "THB", MY: "MYR", ID: "IDR", PH: "PHP",
+    // Eurozone
+    DE: "EUR", FR: "EUR", AT: "EUR", BE: "EUR", FI: "EUR", GR: "EUR",
+    IE: "EUR", IT: "EUR", LU: "EUR", NL: "EUR", PT: "EUR", ES: "EUR",
   };
-  return map[locale] ?? "USD";
+  return (region && regionMap[region]) ?? "USD";
 }
 
 export function monthToLabel(month: string): string {

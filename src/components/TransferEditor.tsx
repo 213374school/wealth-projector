@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import type { Transfer, Account } from "../types";
 import { useScenarioStore } from "../store/scenario";
+import { CurrencyInput } from "./CurrencyInput";
 
 const PERIODS = ["monthly", "quarterly", "half-yearly", "yearly"] as const;
 const PERIOD_LABELS: Record<typeof PERIODS[number], string> = {
@@ -27,6 +28,12 @@ export function TransferEditor({ transfer, accounts }: Props) {
   const deleteTransfer = useScenarioStore(s => s.deleteTransfer);
   const inflationEnabled = useScenarioStore(
     s => s.activeScenarioId ? (s.scenarios[s.activeScenarioId]?.inflationEnabled ?? false) : false
+  );
+  const currencyLocale = useScenarioStore(
+    s => s.activeScenarioId ? (s.scenarios[s.activeScenarioId]?.currencyLocale ?? "en-US") : "en-US"
+  );
+  const currencyCode = useScenarioStore(
+    s => s.activeScenarioId ? (s.scenarios[s.activeScenarioId]?.currencySymbol ?? "USD") : "USD"
   );
   const timelineStart = useScenarioStore(
     s => s.activeScenarioId ? (s.scenarios[s.activeScenarioId]?.timelineStart ?? "") : ""
@@ -184,11 +191,11 @@ export function TransferEditor({ transfer, accounts }: Props) {
           {transfer.amountType === "percent-balance" ? (
             <PercentSlider value={transfer.amount} min={0} max={1} step={0.001} onChange={v => update("amount", v)} />
           ) : (
-            <input
-              type="number"
+            <CurrencyInput
               value={transfer.amount}
-              step="100"
-              onChange={e => update("amount", parseFloat(e.target.value) || 0)}
+              locale={currencyLocale}
+              currencyCode={currencyCode}
+              onChange={v => update("amount", v)}
               className="input"
             />
           )}

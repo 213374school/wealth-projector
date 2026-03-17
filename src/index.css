@@ -2,16 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  body {
+    @apply antialiased;
+  }
+
+  :root {
+    --anchor-line: rgba(100,116,139,0.6);
+    --anchor-label: rgba(100,116,139,0.8);
+    --anchor-hover: rgba(51,65,85,0.9);
+  }
+  .dark {
+    --anchor-line: rgba(148,163,184,0.55);
+    --anchor-label: rgba(148,163,184,0.75);
+    --anchor-hover: rgba(148,163,184,1);
+  }
+}
+
 @layer components {
   .input {
-    @apply w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400;
+    @apply w-full px-3 py-2 text-sm border border-zinc-200 dark:border-zinc-700 rounded-lg
+           bg-white dark:bg-zinc-800/60 text-zinc-900 dark:text-zinc-100
+           placeholder:text-zinc-400 dark:placeholder:text-zinc-500
+           focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500
+           dark:focus:border-violet-400 transition-colors duration-150;
   }
 
   .btn-primary {
-    @apply px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium transition-colors;
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5
+           bg-violet-600 hover:bg-violet-700 active:bg-violet-800
+           text-white text-sm rounded-lg font-medium
+           shadow-sm shadow-violet-600/20 transition-all duration-150;
   }
 
   .btn-secondary {
-    @apply px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md font-medium transition-colors;
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5
+           bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700
+           text-zinc-700 dark:text-zinc-300 text-sm rounded-lg font-medium
+           transition-all duration-150;
+  }
+
+  .btn-icon {
+    @apply p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800
+           text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200
+           transition-colors duration-150;
   }
 }

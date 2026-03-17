@@ -55,8 +55,8 @@ export function TransferEditor({ transfer, accounts }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-gray-900 dark:text-gray-100">Transfer</h3>
-        <button onClick={() => deleteTransfer(transfer.id)} className="text-red-500 hover:text-red-700 text-sm">Delete</button>
+        <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">Transfer</h3>
+        <button onClick={() => deleteTransfer(transfer.id)} className="text-xs text-red-500 hover:text-red-600 dark:hover:text-red-400 transition-colors">Delete</button>
       </div>
 
       <Field label="Name">
@@ -66,8 +66,8 @@ export function TransferEditor({ transfer, accounts }: Props) {
       <Field label="Source Account">
         {transfer.sourceAccountId === null ? (
           <div className="flex items-center gap-2">
-            <span className="flex-1 text-sm text-gray-400 dark:text-gray-500">Income</span>
-            <button onClick={() => update("sourceAccountId", accounts[0]?.id ?? "")} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap">Account</button>
+            <span className="flex-1 text-sm text-zinc-400 dark:text-zinc-500">Income</span>
+            <button onClick={() => update("sourceAccountId", accounts[0]?.id ?? "")} className="text-xs text-violet-600 dark:text-violet-400 hover:underline whitespace-nowrap">Account</button>
           </div>
         ) : (
           <div className="flex items-center gap-2">
@@ -78,7 +78,7 @@ export function TransferEditor({ transfer, accounts }: Props) {
             >
               {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
-            <button onClick={() => update("sourceAccountId", null)} className="text-xs text-gray-400 dark:text-gray-500 hover:underline whitespace-nowrap">Clear</button>
+            <button onClick={() => update("sourceAccountId", null)} className="text-xs text-zinc-400 dark:text-zinc-500 hover:underline whitespace-nowrap">Clear</button>
           </div>
         )}
       </Field>
@@ -86,8 +86,8 @@ export function TransferEditor({ transfer, accounts }: Props) {
       <Field label="Target Account">
         {transfer.targetAccountId === null ? (
           <div className="flex items-center gap-2">
-            <span className="flex-1 text-sm text-gray-400 dark:text-gray-500">Consumption</span>
-            <button onClick={() => update("targetAccountId", accounts[0]?.id ?? "")} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap">Account</button>
+            <span className="flex-1 text-sm text-zinc-400 dark:text-zinc-500">Consumption</span>
+            <button onClick={() => update("targetAccountId", accounts[0]?.id ?? "")} className="text-xs text-violet-600 dark:text-violet-400 hover:underline whitespace-nowrap">Account</button>
           </div>
         ) : (
           <div className="flex items-center gap-2">
@@ -105,7 +105,7 @@ export function TransferEditor({ transfer, accounts }: Props) {
             </select>
             <button onClick={() => {
               updateTransfer(transfer.id, { targetAccountId: null, taxRate: 0, taxBasis: "full" });
-            }} className="text-xs text-gray-400 dark:text-gray-500 hover:underline whitespace-nowrap">Clear</button>
+            }} className="text-xs text-zinc-400 dark:text-zinc-500 hover:underline whitespace-nowrap">Clear</button>
           </div>
         )}
       </Field>
@@ -113,8 +113,8 @@ export function TransferEditor({ transfer, accounts }: Props) {
       <Field label="Start Date">
         {transfer.startDate === null ? (
           <div className="flex items-center gap-2">
-            <span className="flex-1 text-sm text-gray-400 dark:text-gray-500">Beginning</span>
-            <button onClick={() => update("startDate", timelineStart)} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap">Custom</button>
+            <span className="flex-1 text-sm text-zinc-400 dark:text-zinc-500">Beginning</span>
+            <button onClick={() => update("startDate", timelineStart)} className="text-xs text-violet-600 dark:text-violet-400 hover:underline whitespace-nowrap">Custom</button>
           </div>
         ) : (
           <div className="flex items-center gap-2">
@@ -124,15 +124,17 @@ export function TransferEditor({ transfer, accounts }: Props) {
               onChange={e => update("startDate", e.target.value || null)}
               className="input flex-1"
             />
-            <button onClick={() => update("startDate", null)} className="text-xs text-gray-400 dark:text-gray-500 hover:underline whitespace-nowrap">Clear</button>
+            <button onClick={() => update("startDate", null)} className="text-xs text-zinc-400 dark:text-zinc-500 hover:underline whitespace-nowrap">Clear</button>
           </div>
         )}
       </Field>
 
       <div>
-        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">One-time Event</label>
-        <input type="checkbox" checked={transfer.isOneTime} onChange={e => update("isOneTime", e.target.checked)} className="mr-1" />
-        <span className="text-sm text-gray-700 dark:text-gray-300">Fire once at start date</span>
+        <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">One-time Event</label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={transfer.isOneTime} onChange={e => update("isOneTime", e.target.checked)} className="accent-violet-600" />
+          <span className="text-sm text-zinc-700 dark:text-zinc-300">Fire once at start date</span>
+        </label>
       </div>
 
       {!transfer.isOneTime && (
@@ -140,8 +142,8 @@ export function TransferEditor({ transfer, accounts }: Props) {
           <Field label="End Date">
             {transfer.endDate === null ? (
               <div className="flex items-center gap-2">
-                <span className="flex-1 text-sm text-gray-400 dark:text-gray-500">End</span>
-                <button onClick={() => update("endDate", timelineEnd)} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap">Custom</button>
+                <span className="flex-1 text-sm text-zinc-400 dark:text-zinc-500">End</span>
+                <button onClick={() => update("endDate", timelineEnd)} className="text-xs text-violet-600 dark:text-violet-400 hover:underline whitespace-nowrap">Custom</button>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -151,7 +153,7 @@ export function TransferEditor({ transfer, accounts }: Props) {
                   onChange={e => update("endDate", e.target.value || null)}
                   className="input flex-1"
                 />
-                <button onClick={() => update("endDate", null)} className="text-xs text-gray-400 dark:text-gray-500 hover:underline whitespace-nowrap">Clear</button>
+                <button onClick={() => update("endDate", null)} className="text-xs text-zinc-400 dark:text-zinc-500 hover:underline whitespace-nowrap">Clear</button>
               </div>
             )}
           </Field>
@@ -200,6 +202,7 @@ export function TransferEditor({ transfer, accounts }: Props) {
               type="checkbox"
               checked={transfer.inflationHedged ?? true}
               onChange={e => update("inflationHedged", e.target.checked)}
+              className="accent-violet-600"
             />
             Fixed nominal amount
           </label>
@@ -237,9 +240,9 @@ function PercentSlider({ value, min, max, step, onChange }: { value: number; min
   const clamp = (v: number) => Math.max(min, Math.min(max, parseFloat(v.toFixed(4))));
   return (
     <div className="flex items-center gap-2">
-      <button onClick={() => onChange(clamp(value - step))} className="w-6 h-6 flex items-center justify-center rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 select-none">−</button>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(parseFloat(e.target.value))} className="flex-1 accent-indigo-600" />
-      <button onClick={() => onChange(clamp(value + step))} className="w-6 h-6 flex items-center justify-center rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 select-none">+</button>
+      <button onClick={() => onChange(clamp(value - step))} className="w-7 h-7 flex items-center justify-center rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 select-none text-sm font-medium transition-colors">−</button>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(parseFloat(e.target.value))} className="flex-1 accent-violet-600" />
+      <button onClick={() => onChange(clamp(value + step))} className="w-7 h-7 flex items-center justify-center rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 select-none text-sm font-medium transition-colors">+</button>
     </div>
   );
 }
@@ -247,7 +250,7 @@ function PercentSlider({ value, min, max, step, onChange }: { value: number; min
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</label>
+      <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">{label}</label>
       {children}
     </div>
   );

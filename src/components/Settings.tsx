@@ -7,6 +7,14 @@ interface Props {
   onClose: () => void;
 }
 
+function CloseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M4 4l8 8M12 4l-8 8"/>
+    </svg>
+  );
+}
+
 export function Settings({ onClose }: Props) {
   const { activeScenarioId, scenarios, updateScenario, createScenario, duplicateScenario, deleteScenario, setActiveScenario, importScenario } = useScenarioStore();
   const scenario = activeScenarioId ? scenarios[activeScenarioId] : null;
@@ -49,19 +57,21 @@ export function Settings({ onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4"
+        className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl shadow-black/20 w-full max-w-md p-6 space-y-4 border border-zinc-200 dark:border-zinc-800"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Settings</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl">x</button>
+          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Settings</h2>
+          <button onClick={onClose} className="btn-icon -mr-1">
+            <CloseIcon />
+          </button>
         </div>
 
         {/* Scenario management */}
         <div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Scenario</label>
+          <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">Scenario</label>
           <div className="flex gap-2">
             <select
               value={activeScenarioId ?? ""}
@@ -79,7 +89,7 @@ export function Settings({ onClose }: Props) {
                 onClick={() => {
                   if (confirm("Delete this scenario?") && activeScenarioId) deleteScenario(activeScenarioId);
                 }}
-                className="text-red-500 hover:text-red-700 text-xs px-2"
+                className="px-2 text-xs text-red-500 hover:text-red-600 dark:hover:text-red-400 transition-colors"
               >Del</button>
             )}
           </div>
@@ -111,11 +121,12 @@ export function Settings({ onClose }: Props) {
             </Field>
           </div>
           <div className="pt-4">
-            <label className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+            <label className="flex items-center gap-1.5 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
               <input
                 type="checkbox"
                 checked={scenario.inflationEnabled}
                 onChange={e => updateScenario({ inflationEnabled: e.target.checked })}
+                className="accent-violet-600"
               />
               Enabled
             </label>
@@ -132,8 +143,8 @@ export function Settings({ onClose }: Props) {
         </div>
 
         <div className="flex gap-2 pt-2">
-          <button onClick={handleExport} className="btn-secondary flex-1">Export JSON</button>
-          <button onClick={() => fileInputRef.current?.click()} className="btn-secondary flex-1">Import JSON</button>
+          <button onClick={handleExport} className="btn-secondary flex-1 justify-center">Export JSON</button>
+          <button onClick={() => fileInputRef.current?.click()} className="btn-secondary flex-1 justify-center">Import JSON</button>
           <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} className="hidden" />
         </div>
         {importError && <p className="text-red-500 text-xs">{importError}</p>}
@@ -145,7 +156,7 @@ export function Settings({ onClose }: Props) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</label>
+      <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">{label}</label>
       {children}
     </div>
   );

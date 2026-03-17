@@ -204,14 +204,14 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
     }
 
     // Anchor lines (non-fixed only)
+    const anchorLineColor = getComputedStyle(document.documentElement).getPropertyValue("--anchor-line").trim();
     for (const anchor of (scenario.anchors ?? []).filter(a => !a.fixed && months.includes(a.date))) {
       const ax = xScale(anchor.date) ?? 0;
       g.append("line")
         .attr("x1", ax).attr("x2", ax)
         .attr("y1", 0).attr("y2", height)
-        .attr("stroke", "rgba(99,202,183,0.65)")
-        .attr("stroke-width", 1)
-        .attr("stroke-dasharray", "4,2");
+        .attr("stroke", anchorLineColor)
+        .attr("stroke-width", 1);
     }
 
     // X axis — adaptive ticks based on zoom level

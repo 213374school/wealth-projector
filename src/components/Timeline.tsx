@@ -698,8 +698,9 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           if (monthIdx < 0 || monthIdx > viewMonths - 1) return null;
           const pct = (monthIdx / (viewMonths - 1)) * 100;
           const isFixed = !!anchor.fixed;
-          const lineColor = isFixed ? "rgba(148,163,184,0.55)" : "rgba(99,202,183,0.65)";
-          const labelColor = isFixed ? "rgba(148,163,184,0.75)" : "rgba(99,202,183,0.85)";
+          const isHovered = anchor.id === hoveredAnchorId;
+          const lineColor = isHovered && !isFixed ? "var(--anchor-hover)" : "var(--anchor-line)";
+          const labelColor = isHovered && !isFixed ? "var(--anchor-hover)" : "var(--anchor-label)";
           return (
             <div
               key={anchor.id}

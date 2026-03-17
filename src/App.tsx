@@ -25,6 +25,85 @@ function useTheme(): [Theme, () => void] {
   return [theme, () => setTheme(t => t === "dark" ? "light" : "dark")];
 }
 
+// ── Icons ─────────────────────────────────────────────────────────────────────
+
+function FlameIcon() {
+  return (
+    <svg width="13" height="15" viewBox="0 0 13 15" fill="currentColor" className="text-white">
+      <path d="M6.5 0.5C6.5 0.5 10 5 10 8C10 10.5 8.5 12.5 6.5 12.5C4.5 12.5 3 10.5 3 8C3 6.5 3.8 5.2 5 4.2C4.9 5.4 5.5 6.5 6.2 7.1C6.1 5 6.3 2.2 6.5 0.5Z"/>
+    </svg>
+  );
+}
+
+function UndoIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3.5 6L1.5 4L3.5 2"/>
+      <path d="M1.5 4H9A4.5 4.5 0 0 1 9 13H6.5"/>
+    </svg>
+  );
+}
+
+function RedoIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11.5 6L13.5 4L11.5 2"/>
+      <path d="M13.5 4H6A4.5 4.5 0 0 0 6 13H8.5"/>
+    </svg>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <circle cx="7.5" cy="7.5" r="2.5"/>
+      <line x1="7.5" y1="1" x2="7.5" y2="2.5"/>
+      <line x1="7.5" y1="12.5" x2="7.5" y2="14"/>
+      <line x1="1" y1="7.5" x2="2.5" y2="7.5"/>
+      <line x1="12.5" y1="7.5" x2="14" y2="7.5"/>
+      <line x1="3.1" y1="3.1" x2="4.2" y2="4.2"/>
+      <line x1="10.8" y1="10.8" x2="11.9" y2="11.9"/>
+      <line x1="3.1" y1="11.9" x2="4.2" y2="10.8"/>
+      <line x1="10.8" y1="4.2" x2="11.9" y2="3.1"/>
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12.5 9.5A6 6 0 0 1 5.5 2.5a6 6 0 1 0 7 7z"/>
+    </svg>
+  );
+}
+
+function CogIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <line x1="1.5" y1="3.5" x2="2" y2="3.5"/>
+      <circle cx="4" cy="3.5" r="2"/>
+      <line x1="6" y1="3.5" x2="13.5" y2="3.5"/>
+      <line x1="1.5" y1="7.5" x2="8" y2="7.5"/>
+      <circle cx="10" cy="7.5" r="2"/>
+      <line x1="12" y1="7.5" x2="13.5" y2="7.5"/>
+      <line x1="1.5" y1="11.5" x2="4" y2="11.5"/>
+      <circle cx="6" cy="11.5" r="2"/>
+      <line x1="8" y1="11.5" x2="13.5" y2="11.5"/>
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <line x1="6.5" y1="1.5" x2="6.5" y2="11.5"/>
+      <line x1="1.5" y1="6.5" x2="11.5" y2="6.5"/>
+    </svg>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function App() {
   const {
     scenarios,
@@ -52,15 +131,13 @@ export default function App() {
   const [viewportEnd, setViewportEnd] = useState(0);
   const chartAreaRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
-  // Refs so event handlers always see current values without being re-attached
   const vpRef = useRef({ start: 0, end: 0, total: 1 });
-  const panAccRef = useRef(0);      // fractional month accumulator for smooth panning
-  const zoomWidthRef = useRef<number | null>(null); // fractional viewport width for smooth zoom
+  const panAccRef = useRef(0);
+  const zoomWidthRef = useRef<number | null>(null);
   const touchRef = useRef<{ x: number; y: number; dist: number | null } | null>(null);
 
   const scenario = activeScenarioId ? scenarios[activeScenarioId] : null;
 
-  // Suppress unused variable warning
   void selectedItemType;
 
   useEffect(() => {
@@ -76,7 +153,6 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [undo, redo]);
 
-  // Initialize scenario if none exists
   useEffect(() => {
     if (Object.keys(scenarios).length === 0) {
       createScenario();
@@ -84,13 +160,11 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync visible accounts when accounts change
   useEffect(() => {
     if (!scenario) return;
     setVisibleAccounts(prev => {
       const next = new Set(prev);
       for (const acc of scenario.accounts) next.add(acc.id);
-      // Remove accounts that no longer exist
       for (const id of next) {
         if (!scenario.accounts.find(a => a.id === id)) next.delete(id);
       }
@@ -98,11 +172,9 @@ export default function App() {
     });
   }, [scenario?.accounts]);
 
-  // Keep vpRef in sync with state
   useEffect(() => { vpRef.current.start = viewportStart; }, [viewportStart]);
   useEffect(() => { vpRef.current.end = viewportEnd; }, [viewportEnd]);
 
-  // Initialize viewport once simulation is available
   useEffect(() => {
     if (!simulationResult) return;
     const total = simulationResult.months.length;
@@ -112,12 +184,10 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!simulationResult]);
 
-  // Keep total in sync
   useEffect(() => {
     if (simulationResult) vpRef.current.total = simulationResult.months.length;
   }, [simulationResult]);
 
-  // Commit a new viewport (clamped, width-preserving for pan)
   const applyViewport = useCallback((newStart: number, newEnd: number) => {
     const { total } = vpRef.current;
     const width = newEnd - newStart;
@@ -129,7 +199,6 @@ export default function App() {
     setViewportEnd(e);
   }, []);
 
-  // Attach wheel + touch listeners once; read/write through refs so no re-attachment needed
   useEffect(() => {
     const el = chartAreaRef.current;
     if (!el) return;
@@ -137,7 +206,6 @@ export default function App() {
     const onWheel = (e: WheelEvent) => {
       const inTimeline = timelineRef.current?.contains(e.target as Node);
       const isHorizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
-      // Vertical scroll over the timeline scrolls the lane list natively
       if (inTimeline && !isHorizontal && !e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
       const { start, end, total } = vpRef.current;
@@ -145,7 +213,6 @@ export default function App() {
       const containerWidth = el.clientWidth || 800;
 
       if (e.ctrlKey || e.metaKey) {
-        // Accumulate fractional width so tiny trackpad-pinch deltas aren't lost to rounding.
         if (zoomWidthRef.current === null) zoomWidthRef.current = viewWidth;
         zoomWidthRef.current *= (1 + e.deltaY * 0.003);
         zoomWidthRef.current = Math.max(12, Math.min(total - 1, zoomWidthRef.current));
@@ -156,9 +223,7 @@ export default function App() {
           applyViewport(newStart, newStart + newWidth);
         }
       } else {
-        // Leaving zoom mode — reset accumulator so next zoom starts fresh
         zoomWidthRef.current = null;
-        // Pan: accumulate fractional months so slow scrolls aren't dropped
         const rawDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
         panAccRef.current += (rawDelta / containerWidth) * viewWidth;
         const months = Math.trunc(panAccRef.current);
@@ -229,7 +294,6 @@ export default function App() {
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
     };
-  // Intentionally empty deps: handlers read everything through refs
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -242,10 +306,9 @@ export default function App() {
     });
   }, []);
 
-
   if (!scenario || !simulationResult) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900 text-gray-500">
+      <div className="flex items-center justify-center h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-500">
         Loading...
       </div>
     );
@@ -256,41 +319,47 @@ export default function App() {
   const safeViewportEnd = Math.max(safeViewportStart + 1, Math.min(viewportEnd, totalMonths - 1));
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
+    <div className="flex flex-col h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex-shrink-0">
+      <header className="flex items-center justify-between px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="font-bold text-lg text-indigo-600 dark:text-indigo-400">FIRE Planner</h1>
-          <span className="text-sm text-gray-500 dark:text-gray-400">{scenario.name}</span>
+          <div className="w-7 h-7 rounded-md bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-sm shadow-orange-400/30 flex-shrink-0">
+            <FlameIcon />
+          </div>
+          <h1 className="font-semibold text-sm text-zinc-900 dark:text-zinc-100 tracking-tight">FIRE Planner</h1>
+          <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
+          <span className="text-sm text-zinc-500 dark:text-zinc-400">{scenario.name}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-0.5">
           <button
             onClick={undo}
             disabled={_undoStack.length === 0}
-            className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 disabled:opacity-30"
+            className="btn-icon disabled:opacity-30"
             title="Undo (Ctrl+Z)"
-          >↩</button>
+          ><UndoIcon /></button>
           <button
             onClick={redo}
             disabled={_redoStack.length === 0}
-            className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 disabled:opacity-30"
+            className="btn-icon disabled:opacity-30"
             title="Redo (Ctrl+Shift+Z)"
-          >↪</button>
-          <button onClick={() => addAccount()} className="btn-primary text-sm">
-            + Account
+          ><RedoIcon /></button>
+          <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-700 mx-1.5" />
+          <button onClick={() => addAccount()} className="btn-primary text-xs">
+            <PlusIcon /> Account
           </button>
           <button
             onClick={() => setShowAddTransfer(true)}
             disabled={scenario.accounts.length === 0}
-            className="btn-secondary text-sm disabled:opacity-40"
+            className="btn-secondary text-xs disabled:opacity-40 ml-1"
           >
-            + Transfer
+            <PlusIcon /> Transfer
           </button>
-          <button onClick={toggleTheme} className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500" title="Toggle theme">
-            {theme === "dark" ? "Sun" : "Moon"}
+          <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-700 mx-1.5" />
+          <button onClick={toggleTheme} className="btn-icon" title="Toggle theme">
+            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
           </button>
-          <button onClick={() => setShowSettings(true)} className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500" title="Settings">
-            Settings
+          <button onClick={() => setShowSettings(true)} className="btn-icon" title="Settings">
+            <CogIcon />
           </button>
         </div>
       </header>
@@ -300,7 +369,7 @@ export default function App() {
         {/* Left: Chart + Timeline */}
         <div ref={chartAreaRef} className="flex flex-col flex-1 overflow-hidden">
           {/* Legend */}
-          <div className="px-4 py-2 flex-shrink-0 border-b border-gray-100 dark:border-gray-800">
+          <div className="px-4 py-2 flex-shrink-0 border-b border-zinc-100 dark:border-zinc-800/60">
             <Legend
               accounts={scenario.accounts}
               visibleAccounts={visibleAccounts}
@@ -330,14 +399,12 @@ export default function App() {
             const allAnchors = scenario.anchors ?? [];
             const viewMonths = safeViewportEnd - safeViewportStart + 1;
 
-            // Compute pct positions for all anchors
             const positioned = allAnchors.flatMap(anchor => {
               const monthIdx = monthsBetween(scenario.timelineStart, anchor.date) - safeViewportStart;
               if (monthIdx < 0 || monthIdx > viewMonths - 1) return [];
               return [{ anchor, pct: (monthIdx / (viewMonths - 1)) * 100 }];
             });
 
-            // Crowding: hide non-fixed labels whose nearest neighbour is within threshold
             const MIN_LABEL_PX = 80;
             const innerWidth = (chartAreaRef.current?.clientWidth ?? 800) - CHART_MARGIN.left - CHART_MARGIN.right;
             const minPct = (MIN_LABEL_PX / innerWidth) * 100;
@@ -347,7 +414,6 @@ export default function App() {
                 if (Math.abs(positioned[j].pct - positioned[i].pct) < minPct) {
                   const iHovered = positioned[i].anchor.id === hoveredAnchorId;
                   const jHovered = positioned[j].anchor.id === hoveredAnchorId;
-                  // Hovered anchor always wins, then fixed, then non-fixed
                   if (iHovered) {
                     crowded.add(positioned[j].anchor.id);
                   } else if (jHovered) {
@@ -384,9 +450,9 @@ export default function App() {
                         top: 2,
                         fontSize: 10,
                         whiteSpace: "nowrap",
-                        color: isFixed
-                          ? "rgba(148,163,184,0.75)"
-                          : isHovered ? "rgba(99,202,183,1)" : "rgba(99,202,183,0.85)",
+                        color: isHovered && !isFixed
+                          ? "var(--anchor-hover)"
+                          : "var(--anchor-label)",
                       }}
                     >
                       {monthToLabel(anchor.date)}
@@ -401,7 +467,7 @@ export default function App() {
           {/* Timeline */}
           <div
             ref={timelineRef}
-            className="flex-shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 py-2"
+            className="flex-shrink-0 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2"
             style={{ minHeight: 80, maxHeight: "35vh", overflowY: "auto", paddingLeft: CHART_MARGIN.left + 8, paddingRight: CHART_MARGIN.right + 8 }}
           >
             <Timeline
@@ -419,7 +485,7 @@ export default function App() {
         </div>
 
         {/* Right: Editor Panel */}
-        <div className="w-72 flex-shrink-0 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-y-auto">
+        <div className="w-72 flex-shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-y-auto">
           <EditorPanel />
         </div>
       </div>
@@ -455,15 +521,15 @@ function AddTransferModal({
   const [tgtId, setTgtId] = useState<string>(accounts[0]?.id ?? "");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-sm p-6 space-y-4"
+        className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl shadow-black/20 w-full max-w-sm p-6 space-y-4 border border-zinc-200 dark:border-zinc-800"
         onClick={e => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Add Transfer</h2>
+        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Add Transfer</h2>
 
         <div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">From (source)</label>
+          <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">From (source)</label>
           <select
             value={srcId}
             onChange={e => setSrcId(e.target.value)}
@@ -475,7 +541,7 @@ function AddTransferModal({
         </div>
 
         <div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">To (target)</label>
+          <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">To (target)</label>
           <select
             value={tgtId}
             onChange={e => setTgtId(e.target.value)}
@@ -486,7 +552,7 @@ function AddTransferModal({
           </select>
         </div>
 
-        <p className="text-xs text-gray-400 dark:text-gray-500">
+        <p className="text-xs text-zinc-400 dark:text-zinc-500">
           Source and target can be the same account (e.g. for a gains tax event). Set one side to "None" for a contribution or consumption.
         </p>
 
@@ -494,11 +560,11 @@ function AddTransferModal({
           <button
             onClick={() => onConfirm(srcId || null, tgtId || null)}
             disabled={!srcId && !tgtId}
-            className="btn-primary flex-1 disabled:opacity-50"
+            className="btn-primary flex-1 justify-center disabled:opacity-50"
           >
             Create
           </button>
-          <button onClick={onClose} className="btn-secondary flex-1">
+          <button onClick={onClose} className="btn-secondary flex-1 justify-center">
             Cancel
           </button>
         </div>

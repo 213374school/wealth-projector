@@ -9,16 +9,18 @@
 
   :root {
     --none-label: rgba(20,20,20,0.75);
-    --none-stripe-a: rgba(160,165,175,0.22);
-    --none-stripe-b: rgba(160,165,175,0.12);
+    --none-stripe-a: rgba(160,165,175,0.38);
+    --none-stripe-b: rgba(160,165,175,0.20);
+    --none-border: rgba(100,108,120,0.35);
     --anchor-line: rgba(100,116,139,0.6);
     --anchor-label: rgba(100,116,139,0.8);
     --anchor-hover: rgba(51,65,85,0.9);
   }
   .dark {
     --none-label: rgba(255,255,255,0.85);
-    --none-stripe-a: rgba(107,114,128,0.32);
-    --none-stripe-b: rgba(107,114,128,0.2);
+    --none-stripe-a: rgba(107,114,128,0.52);
+    --none-stripe-b: rgba(107,114,128,0.34);
+    --none-border: rgba(160,170,185,0.28);
     --anchor-line: rgba(148,163,184,0.55);
     --anchor-label: rgba(148,163,184,0.75);
     --anchor-hover: rgba(148,163,184,1);

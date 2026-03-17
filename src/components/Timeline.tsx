@@ -849,6 +849,8 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
                       ? "repeating-linear-gradient(-45deg, var(--none-stripe-a) 0px, var(--none-stripe-a) 12px, var(--none-stripe-b) 12px, var(--none-stripe-b) 24px)"
                       : srcColor,
                     opacity: 0.85,
+                    borderRadius: srcIsNone ? "4px 0 0 4px" : undefined,
+                    boxShadow: srcIsNone ? "inset 0 0 0 1px var(--none-border)" : undefined,
                     clipPath: `polygon(0% 0%, calc(100% - ${arrowTip}px) 0%, 100% 50%, calc(100% - ${arrowTip}px) 100%, 0% 100%)`,
                     pointerEvents: "none",
                   }} />
@@ -861,9 +863,23 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
                       ? "repeating-linear-gradient(-45deg, var(--none-stripe-a) 0px, var(--none-stripe-a) 12px, var(--none-stripe-b) 12px, var(--none-stripe-b) 24px)"
                       : tgtColor,
                     opacity: 0.85,
+                    borderRadius: tgtIsNone ? "0 4px 4px 0" : undefined,
+                    boxShadow: tgtIsNone ? "inset 0 0 0 1px var(--none-border)" : undefined,
                     clipPath: `polygon(2px 0%, 100% 0%, 100% 100%, 2px 100%, ${arrowTip + 2}px 50%, 2px 0%)`,
                     pointerEvents: "none",
                   }} />
+                  {/* Diagonal border for src arrow tip */}
+                  {srcIsNone && (
+                    <svg style={{ position: "absolute", left: `calc(50% - ${(arrowTip + 2) / 2}px)`, top: 0, width: `${arrowTip}px`, height: `${h}px`, pointerEvents: "none", zIndex: 3 }}>
+                      <polyline points={`0,0.5 ${arrowTip},${h / 2} 0,${h - 0.5}`} fill="none" stroke="var(--none-border)" strokeWidth="1" />
+                    </svg>
+                  )}
+                  {/* Diagonal border for tgt notch */}
+                  {tgtIsNone && (
+                    <svg style={{ position: "absolute", left: `calc(50% - ${(arrowTip - 2) / 2}px)`, top: 0, width: `${arrowTip}px`, height: `${h}px`, pointerEvents: "none", zIndex: 3 }}>
+                      <polyline points={`0,0.5 ${arrowTip},${h / 2} 0,${h - 0.5}`} fill="none" stroke="var(--none-border)" strokeWidth="1" />
+                    </svg>
+                  )}
                 </>
               )}
               {!isOneTime && widthPct > 5 && (

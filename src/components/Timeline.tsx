@@ -800,11 +800,15 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
           let srcColor = "#6b7280";
           let tgtColor = "#6b7280";
+          let srcIsNone = false;
+          let tgtIsNone = false;
           let tgtName: string | undefined;
           if (type === "account" && acc) srcColor = acc.color;
           if (isTransfer) {
             const srcAcc = scenario.accounts.find(a => a.id === transfer!.sourceAccountId);
             const tgtAcc = scenario.accounts.find(a => a.id === transfer!.targetAccountId);
+            srcIsNone = transfer!.sourceAccountId === null;
+            tgtIsNone = transfer!.targetAccountId === null;
             srcColor = srcAcc?.color ?? "#6b7280";
             tgtColor = tgtAcc?.color ?? "#6b7280";
             tgtName = tgtAcc?.name;
@@ -841,7 +845,9 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
                     position: "absolute",
                     left: 0, top: 0, bottom: 0,
                     width: `calc(50% + ${(arrowTip - 2) / 2}px)`,
-                    background: srcColor,
+                    background: srcIsNone
+                      ? "repeating-linear-gradient(-45deg, var(--none-stripe-a) 0px, var(--none-stripe-a) 12px, var(--none-stripe-b) 12px, var(--none-stripe-b) 24px)"
+                      : srcColor,
                     opacity: 0.85,
                     clipPath: `polygon(0% 0%, calc(100% - ${arrowTip}px) 0%, 100% 50%, calc(100% - ${arrowTip}px) 100%, 0% 100%)`,
                     pointerEvents: "none",
@@ -851,7 +857,9 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
                     position: "absolute",
                     left: `calc(50% - ${(arrowTip + 2) / 2}px)`,
                     right: 0, top: 0, bottom: 0,
-                    background: tgtColor,
+                    background: tgtIsNone
+                      ? "repeating-linear-gradient(-45deg, var(--none-stripe-a) 0px, var(--none-stripe-a) 12px, var(--none-stripe-b) 12px, var(--none-stripe-b) 24px)"
+                      : tgtColor,
                     opacity: 0.85,
                     clipPath: `polygon(2px 0%, 100% 0%, 100% 100%, 2px 100%, ${arrowTip + 2}px 50%, 2px 0%)`,
                     pointerEvents: "none",
@@ -859,7 +867,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
                 </>
               )}
               {!isOneTime && widthPct > 5 && (
-                <span className={`text-xs text-white truncate px-1 pointer-events-none ${!isTransfer ? "font-bold" : ""}`} style={{ position: "relative", zIndex: 1 }}>{nameMap[id]}</span>
+                <span className={`text-xs truncate px-1 pointer-events-none ${!isTransfer ? "font-bold" : ""}`} style={{ position: "relative", zIndex: 1, color: srcIsNone ? "var(--none-label)" : "white" }}>{nameMap[id]}</span>
               )}
               {isTransfer && !isOneTime && widthPct > 5 && tgtName && (
                 <span className="absolute right-1 text-xs text-white pointer-events-none" style={{ zIndex: 1 }}>{tgtName}</span>

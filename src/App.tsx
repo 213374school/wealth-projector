@@ -123,6 +123,7 @@ export default function App() {
 
   const [theme, toggleTheme] = useTheme();
   const [showSettings, setShowSettings] = useState(false);
+  const [showRealValues, setShowRealValues] = useState(true);
   const [showAddTransfer, setShowAddTransfer] = useState(false);
   const [visibleAccounts, setVisibleAccounts] = useState<Set<string>>(new Set());
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
@@ -369,12 +370,26 @@ export default function App() {
         {/* Left: Chart + Timeline */}
         <div ref={chartAreaRef} className="flex flex-col flex-1 overflow-hidden">
           {/* Legend */}
-          <div className="px-4 py-2 flex-shrink-0 border-b border-zinc-100 dark:border-zinc-800/60">
+          <div className="px-4 py-2 flex-shrink-0 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center gap-3">
             <Legend
               accounts={scenario.accounts}
               visibleAccounts={visibleAccounts}
               onToggle={toggleAccountVisibility}
             />
+            {scenario.inflationEnabled && scenario.inflationRate !== 0 && (
+              <div className="flex items-center ml-auto flex-shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs">
+                <button
+                  onClick={() => setShowRealValues(false)}
+                  title="Nominal — values as actual future amounts, not adjusted for inflation"
+                  className={`px-2.5 py-1 transition-colors ${!showRealValues ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-medium" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                >Nominal</button>
+                <button
+                  onClick={() => setShowRealValues(true)}
+                  title="Real — values adjusted for inflation, expressed in today's purchasing power"
+                  className={`px-2.5 py-1 transition-colors ${showRealValues ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-medium" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                >Real</button>
+              </div>
+            )}
           </div>
 
           {/* Chart */}
@@ -391,6 +406,7 @@ export default function App() {
               hoveredIdx={hoveredIdx}
               onHoverIdx={setHoveredIdx}
               hoveredAnchorId={hoveredAnchorId}
+              showRealValues={showRealValues}
             />
           </div>
 

@@ -18,9 +18,10 @@ interface ChartProps {
   hoveredAnchorId: string | null;
   selectedItemId?: string | null;
   onSelectItem?: (id: string | null, type: "account" | "transfer" | null) => void;
+  showRealValues?: boolean;
 }
 
-export function Chart({ result, accounts, scenario, visibleAccounts, viewportStart, viewportEnd, hoveredIdx, onHoverIdx, hoveredAnchorId, selectedItemId, onSelectItem }: ChartProps) {
+export function Chart({ result, accounts, scenario, visibleAccounts, viewportStart, viewportEnd, hoveredIdx, onHoverIdx, hoveredAnchorId, selectedItemId, onSelectItem, showRealValues = true }: ChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const layoutRef = useRef<{ marginLeft: number; marginTop: number; innerHeight: number; step: number } | null>(null);
@@ -53,7 +54,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
 
     const deflate = (nominal: number | null | undefined, absIdx: number): number => {
       if (nominal === null || nominal === undefined) return 0;
-      if (!scenario.inflationEnabled || scenario.inflationRate === 0) return nominal;
+      if (!scenario.inflationEnabled || scenario.inflationRate === 0 || !showRealValues) return nominal;
       return nominal / Math.pow(1 + scenario.inflationRate, absIdx / 12);
     };
 
@@ -364,7 +365,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       onSelectItem(null, null);
     });
 
-  }, [result, accounts, visibleAccounts, viewportStart, viewportEnd, scenario, onHoverIdx, selectedItemId, onSelectItem]);
+  }, [result, accounts, visibleAccounts, viewportStart, viewportEnd, scenario, onHoverIdx, selectedItemId, onSelectItem, showRealValues]);
 
   // visibleMonths is used to trigger re-render when viewport changes
   void visibleMonths;

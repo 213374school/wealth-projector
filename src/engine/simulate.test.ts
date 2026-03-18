@@ -391,7 +391,7 @@ describe("Fixed transfers: multiple in same month", () => {
     expect(result.balances["acc2"][0]).toBeCloseTo(3000);
   });
 
-  it("two percent-balance transfers both use the opening snapshot", () => {
+  it("second percent-balance transfer sees post-first-transfer balance", () => {
     const acc = makeAccount({ id: "acc1", initialBalance: 10000 });
     const t1 = makeAccount({ id: "acc2", initialBalance: 0 });
     const t2 = makeAccount({ id: "acc3", initialBalance: 0 });
@@ -399,10 +399,11 @@ describe("Fixed transfers: multiple in same month", () => {
     const tr2 = makeTransfer({ id: "t2", sourceAccountId: "acc1", targetAccountId: "acc3", amount: 0.20, amountType: "percent-balance", taxRate: 0, isOneTime: true });
     const scenario = makeScenario({ accounts: [acc, t1, t2], transfers: [tr1, tr2] });
     const result = runSimulation(scenario);
-    // Both use snapshot 10000: 1000 + 2000 = 3000 deducted
-    expect(result.balances["acc1"][0]).toBeCloseTo(7000);
+    // tr1: 10% × 10000 = 1000 → acc1 = 9000, acc2 = 1000
+    // tr2: 20% × 9000 = 1800 → acc1 = 7200, acc3 = 1800
+    expect(result.balances["acc1"][0]).toBeCloseTo(7200);
     expect(result.balances["acc2"][0]).toBeCloseTo(1000);
-    expect(result.balances["acc3"][0]).toBeCloseTo(2000);
+    expect(result.balances["acc3"][0]).toBeCloseTo(1800);
   });
 });
 
@@ -1181,8 +1182,8 @@ describe("C2: Sequential withdrawals maintain proportional principal ratio", () 
   });
 });
 
-describe("C3: Two simultaneous withdrawals from same account use opening snapshot principal fraction", () => {
-  it("both principal debits computed from opening snapshot; ratio preserved", () => {
+describe("C3: Two sequential withdrawals from same account each use the live principal fraction", () => {
+  it("each transfer uses the balance at the moment it executes; proportional debit preserves ratio", () => {
     const acc = makeAccount({ id: "acc1", initialBalance: 10000, initialPrincipalRatio: 0.5, growthRate: 0 });
     const t1 = makeTransfer({ id: "t1", amount: 2000, isOneTime: true });
     const t2 = makeTransfer({ id: "t2", amount: 3000, isOneTime: true });
@@ -1507,8 +1508,8 @@ describe("H1: Retirement drawdown scenario: portfolio survives 20 years", () => 
   });
 });
 
-describe("H2: Transfer chain A→B→C uses opening snapshots throughout", () => {
-  it("C receives from B's opening balance, not B's post-credit balance", () => {
+describe("H2: Transfer chain A→B→C: fixed amount transfers give correct result in sequential model", () => {
+  it("C gets $1000 (fixed amount); in the sequential model B's credit from A is visible within the same month", () => {
     const accA = makeAccount({ id: "acc1", initialBalance: 10000, growthRate: 0 });
     const accB = makeAccount({ id: "acc2", initialBalance: 5000, growthRate: 0 });
     const accC = makeAccount({ id: "acc3", initialBalance: 0, growthRate: 0 });
@@ -1518,7 +1519,7 @@ describe("H2: Transfer chain A→B→C uses opening snapshots throughout", () =>
     const result = runSimulation(scenario);
     expect(result.balances["acc1"][0]).toBeCloseTo(8000);
     expect(result.balances["acc2"][0]).toBeCloseTo(6000); // +2000 from A, -1000 to C = net +1000
-    expect(result.balances["acc3"][0]).toBeCloseTo(1000); // gets $1000 from B's opening $5000
+    expect(result.balances["acc3"][0]).toBeCloseTo(1000); // gets $1000 fixed from B
   });
 });
 
@@ -1533,5 +1534,61 @@ describe("H3: Account fully drained then receives contribution", () => {
     expect(result.principals["acc1"][0]).toBeCloseTo(0);
     expect(result.balances["acc1"][1]).toBeCloseTo(2000);
     expect(result.principals["acc1"][1]).toBeCloseTo(2000);
+  });
+});
+
+// ─── SECTION S: Sequential Processing Behaviour ──────────────────────────────
+
+describe("S1: Percent-balance transfer sees updated balance from prior external transfer in same month", () => {
+  it("10% of post-contribution balance, not opening balance", () => {
+    // acc1: $10,000. T1 (external → acc1): $5,000. T2 (acc1 → null): 10% percent-balance.
+    // Old model: T2 = 10% × $10,000 = $1,000. New model: T2 = 10% × $15,000 = $1,500.
+    const acc = makeAccount({ id: "acc1", initialBalance: 10000, growthRate: 0 });
+    const t1 = makeTransfer({ id: "t1", sourceAccountId: null, targetAccountId: "acc1", amount: 5000, isOneTime: true, amountType: "fixed" });
+    const t2 = makeTransfer({ id: "t2", sourceAccountId: "acc1", targetAccountId: null, amount: 0.10, isOneTime: true, amountType: "percent-balance" });
+    const scenario = makeScenario({ accounts: [acc], transfers: [t1, t2] });
+    const result = runSimulation(scenario);
+    // Phase 1: external $5,000 → acc1 = $15,000
+    // Phase 2: acc1 growth (0), then T2 = 10% × $15,000 = $1,500 out → acc1 = $13,500
+    expect(result.balances["acc1"][0]).toBeCloseTo(13500);
+  });
+});
+
+describe("S2: Gains-only self-transfer + outgoing fixed transfer on same account: no sentinel corruption", () => {
+  it("outgoing transfer after gains-only self-transfer correctly debits principal", () => {
+    // acc1: $10,000, principal $5,000. acc2: $0.
+    // T1: gains-only self-transfer (acc1→acc1), taxRate 20% → gains=5000, taxCost=1000, principal resets to $9,000.
+    // T2: $3,000 fixed from acc1 → acc2 (fires after T1 in Phase 2 for acc1).
+    // After T1: acc1 balance=9000, principal=9000.
+    // After T2: acc1 balance=6000, principal debit = 3000 × (9000/9000) = 3000 → principal=6000.
+    // acc2 balance=3000, principal=3000.
+    const acc1 = makeAccount({ id: "acc1", initialBalance: 10000, initialPrincipalRatio: 0.5, growthRate: 0 });
+    const acc2 = makeAccount({ id: "acc2", initialBalance: 0, growthRate: 0 });
+    const t1 = makeTransfer({ id: "t1", sourceAccountId: "acc1", targetAccountId: "acc1", amountType: "gains-only", taxRate: 0.20, taxBasis: "full", isOneTime: true });
+    const t2 = makeTransfer({ id: "t2", sourceAccountId: "acc1", targetAccountId: "acc2", amount: 3000, amountType: "fixed", taxRate: 0, isOneTime: true });
+    const scenario = makeScenario({ accounts: [acc1, acc2], transfers: [t1, t2] });
+    const result = runSimulation(scenario);
+    expect(result.balances["acc1"][0]).toBeCloseTo(6000);
+    expect(result.principals["acc1"][0]).toBeCloseTo(6000);
+    expect(result.balances["acc2"][0]).toBeCloseTo(3000);
+    expect(result.principals["acc2"][0]).toBeCloseTo(3000);
+  });
+});
+
+describe("S3: Transfer chain A→B→C: C draws from B's post-credit balance for percent-balance", () => {
+  it("C receives 50% of B's post-credit balance, not B's opening zero balance", () => {
+    // A: $10,000. B: $0. C: $0.
+    // T1: A→B $5,000 fixed. T2: B→C 50% percent-balance.
+    // Old model: T2 = 50% × $0 = $0. New model: T2 = 50% × $5,000 = $2,500.
+    const accA = makeAccount({ id: "acc1", initialBalance: 10000, growthRate: 0 });
+    const accB = makeAccount({ id: "acc2", initialBalance: 0, growthRate: 0 });
+    const accC = makeAccount({ id: "acc3", initialBalance: 0, growthRate: 0 });
+    const t1 = makeTransfer({ id: "t1", sourceAccountId: "acc1", targetAccountId: "acc2", amount: 5000, amountType: "fixed", isOneTime: true });
+    const t2 = makeTransfer({ id: "t2", sourceAccountId: "acc2", targetAccountId: "acc3", amount: 0.50, amountType: "percent-balance", isOneTime: true });
+    const scenario = makeScenario({ accounts: [accA, accB, accC], transfers: [t1, t2] });
+    const result = runSimulation(scenario);
+    expect(result.balances["acc1"][0]).toBeCloseTo(5000);
+    expect(result.balances["acc2"][0]).toBeCloseTo(2500);
+    expect(result.balances["acc3"][0]).toBeCloseTo(2500);
   });
 });

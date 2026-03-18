@@ -27,6 +27,73 @@ function periodRate(annualRate: number, n: number): number {
   return Math.pow(1 + annualRate, n / 12) - 1;
 }
 
+function applyTransfer(
+  t: Transfer,
+  balance: Record<string, number>,
+  principal: Record<string, number>,
+  monthIndex: number,
+  scenario: Scenario
+): void {
+  const src = t.sourceAccountId;
+  const tgt = t.targetAccountId;
+
+  const srcBal = src ? (balance[src] ?? 0) : 0;
+  const srcPrincipal = src ? (principal[src] ?? 0) : 0;
+
+  // Resolve amount
+  let resolvedAmount: number;
+  if (t.amountType === "fixed") {
+    resolvedAmount = t.amount;
+    if (
+      scenario.inflationEnabled &&
+      scenario.inflationRate !== 0 &&
+      (t.inflationHedged ?? true) === false
+    ) {
+      resolvedAmount = t.amount * Math.pow(1 + scenario.inflationRate, monthIndex / 12);
+    }
+  } else if (t.amountType === "percent-balance") {
+    resolvedAmount = Math.abs(srcBal) * t.amount;
+  } else {
+    // gains-only
+    resolvedAmount = Math.max(0, srcBal - srcPrincipal);
+  }
+
+  // Compute tax cost
+  let taxCost: number;
+  if (t.taxBasis === "full") {
+    taxCost = resolvedAmount * t.taxRate;
+  } else {
+    // gains-fraction
+    let gainsRatio: number;
+    if (srcBal <= 0) {
+      gainsRatio = 0;
+    } else {
+      gainsRatio = Math.max(0, srcBal - srcPrincipal) / srcBal;
+    }
+    taxCost = resolvedAmount * gainsRatio * t.taxRate;
+  }
+
+  const netToTarget = resolvedAmount - taxCost;
+
+  if (src !== null && src === tgt && t.amountType === "gains-only") {
+    // Self-rebalance: pay tax, reset principal to new balance
+    balance[src] -= taxCost;
+    principal[src] = balance[src];
+  } else {
+    if (src !== null) {
+      balance[src] -= resolvedAmount;
+      if (srcBal !== 0) {
+        const fraction = srcPrincipal / srcBal;
+        principal[src] -= resolvedAmount * fraction;
+      }
+    }
+    if (tgt !== null && tgt in balance) {
+      balance[tgt] += netToTarget;
+      principal[tgt] += netToTarget;
+    }
+  }
+}
+
 export function runSimulation(scenario: Scenario): SimulationResult {
   const { accounts, transfers, timelineStart, timelineEnd } = scenario;
 
@@ -59,127 +126,39 @@ export function runSimulation(scenario: Scenario): SimulationResult {
   for (let i = 0; i < totalMonths; i++) {
     const M = months[i];
 
-    // Snapshots at start of month
-    const snapshot: Record<string, number> = { ...balance };
-    const principalSnapshot: Record<string, number> = { ...principal };
-
-    // Deltas to accumulate
-    const balanceDelta: Record<string, number> = {};
-    const principalDelta: Record<string, number> = {};
-
-    for (const acc of accounts) {
-      if (acc.id in balance) {
-        balanceDelta[acc.id] = 0;
-        principalDelta[acc.id] = 0;
-      }
-    }
-
-    // Apply transfers
+    // Phase 1: External income (null-source transfers, in scenario.transfers order)
     for (const t of transfers) {
+      if (t.sourceAccountId !== null) continue;
       if (!isTransferActive(t, M, accounts, timelineStart)) continue;
-
-      const srcBal = t.sourceAccountId ? (snapshot[t.sourceAccountId] ?? 0) : 0;
-      const srcPrincipal = t.sourceAccountId ? (principalSnapshot[t.sourceAccountId] ?? 0) : 0;
-
-      // Resolve amount
-      let resolvedAmount: number;
-      if (t.amountType === "fixed") {
-        resolvedAmount = t.amount;
-        if (
-          scenario.inflationEnabled &&
-          scenario.inflationRate !== 0 &&
-          (t.inflationHedged ?? true) === false
-        ) {
-          resolvedAmount = t.amount * Math.pow(1 + scenario.inflationRate, i / 12);
-        }
-      } else if (t.amountType === "percent-balance") {
-        resolvedAmount = Math.abs(srcBal) * t.amount;
-      } else {
-        // gains-only
-        resolvedAmount = Math.max(0, srcBal - srcPrincipal);
-      }
-
-      // Compute tax cost
-      let taxCost: number;
-      if (t.taxBasis === "full") {
-        taxCost = resolvedAmount * t.taxRate;
-      } else {
-        // gains-fraction
-        let gainsRatio: number;
-        if (srcBal <= 0) {
-          gainsRatio = 0;
-        } else {
-          gainsRatio = Math.max(0, srcBal - srcPrincipal) / srcBal;
-        }
-        taxCost = resolvedAmount * gainsRatio * t.taxRate;
-      }
-
-      const netToTarget = resolvedAmount - taxCost;
-
-      if (
-        t.sourceAccountId !== null &&
-        t.sourceAccountId === t.targetAccountId &&
-        t.amountType === "gains-only"
-      ) {
-        // Special case: self-transfer gains-only — just deduct tax from balance, reset principal
-        balanceDelta[t.sourceAccountId] = (balanceDelta[t.sourceAccountId] ?? 0) - taxCost;
-        // principal will be set to balance after commit — track via special flag
-        // We'll handle this after committing balance deltas by marking a "reset principal" flag
-        // For now store as a special signal: set principalDelta to NaN to indicate "set to balance"
-        principalDelta[t.sourceAccountId] = NaN; // sentinel: reset to balance
-      } else {
-        // Deduct from source (skip if source is null — contribution from outside)
-        if (t.sourceAccountId !== null) {
-          balanceDelta[t.sourceAccountId] = (balanceDelta[t.sourceAccountId] ?? 0) - resolvedAmount;
-
-          // Update principal on source (proportional debit)
-          if (snapshot[t.sourceAccountId] !== 0) {
-            const principalFraction = srcPrincipal / snapshot[t.sourceAccountId];
-            const principalDebit = resolvedAmount * principalFraction;
-            if (!isNaN(principalDelta[t.sourceAccountId])) {
-              principalDelta[t.sourceAccountId] = (principalDelta[t.sourceAccountId] ?? 0) - principalDebit;
-            }
-          }
-        }
-
-        // Credit to target (skip if target is null — pure consumption)
-        if (t.targetAccountId !== null && t.targetAccountId in balanceDelta) {
-          balanceDelta[t.targetAccountId] = (balanceDelta[t.targetAccountId] ?? 0) + netToTarget;
-          if (!isNaN(principalDelta[t.targetAccountId])) {
-            principalDelta[t.targetAccountId] = (principalDelta[t.targetAccountId] ?? 0) + netToTarget;
-          }
-        }
-      }
+      applyTransfer(t, balance, principal, i, scenario);
     }
 
-    // Apply growth (uses snapshot values)
+    // Phase 2: Per-account in scenario.accounts order
     for (const acc of accounts) {
       if (!(acc.id in balance)) continue;
+
+      // a. Apply growth to current balance (post-Phase-1)
       const N = periodToMonths(acc.growthPeriod);
       const monthsFromStart = monthsBetween(timelineStart, M);
       if (monthsFromStart >= 0 && monthsFromStart % N === 0) {
         const rate = periodRate(acc.growthRate, N);
-        const delta = snapshot[acc.id] * rate;
-        balanceDelta[acc.id] = (balanceDelta[acc.id] ?? 0) + delta;
+        balance[acc.id] += balance[acc.id] * rate;
         // principal is NOT updated for growth
+      }
+
+      // b. Apply all active outgoing transfers from this account
+      for (const t of transfers) {
+        if (t.sourceAccountId !== acc.id) continue;
+        if (!isTransferActive(t, M, accounts, timelineStart)) continue;
+        applyTransfer(t, balance, principal, i, scenario);
       }
     }
 
-    // Commit deltas
+    // Phase 3: End-of-month bookkeeping
     for (const acc of accounts) {
       if (!(acc.id in balance)) continue;
-
-      balance[acc.id] += balanceDelta[acc.id] ?? 0;
-
-      if (isNaN(principalDelta[acc.id])) {
-        // Sentinel: reset principal to new balance (gains-only self-transfer)
-        principal[acc.id] = balance[acc.id];
-      } else {
-        principal[acc.id] += principalDelta[acc.id] ?? 0;
-        // Clamp: principal cannot go below min(0, balance)
-        principal[acc.id] = Math.max(principal[acc.id], Math.min(0, balance[acc.id]));
-      }
-
+      // Clamp: principal cannot go below min(0, balance)
+      principal[acc.id] = Math.max(principal[acc.id], Math.min(0, balance[acc.id]));
       balances[acc.id][i] = balance[acc.id];
       principals[acc.id][i] = principal[acc.id];
     }

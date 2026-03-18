@@ -21,10 +21,18 @@ interface ChartProps {
   showRealValues?: boolean;
 }
 
+type BarDatum = Record<string, number | string> & { _absIdx: number };
+
 export function Chart({ result, accounts, scenario, visibleAccounts, viewportStart, viewportEnd, hoveredIdx, onHoverIdx, hoveredAnchorId, selectedItemId, onSelectItem, showRealValues = true }: ChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const layoutRef = useRef<{ marginLeft: number; marginTop: number; innerHeight: number; step: number } | null>(null);
+  const layoutRef = useRef<{
+    marginLeft: number;
+    marginTop: number;
+    innerHeight: number;
+    step: number;
+    absIdxToX: Map<number, number> | null;
+  } | null>(null);
 
   const visibleMonths = useMemo(
     () => result.months.slice(viewportStart, viewportEnd + 1),
@@ -43,7 +51,6 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
     const width = totalWidth - margin.left - margin.right;
     const height = totalHeight - margin.top - margin.bottom;
     const viewMonths = viewportEnd - viewportStart + 1;
-    layoutRef.current = { marginLeft: margin.left, marginTop: margin.top, innerHeight: height, step: width / Math.max(viewMonths - 1, 1) };
 
     svg.attr("width", totalWidth).attr("height", totalHeight);
 
@@ -58,25 +65,79 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       return nominal / Math.pow(1 + scenario.inflationRate, absIdx / 12);
     };
 
-    // Build data array: one entry per month
-    const data = months.map((m, i) => {
-      const idx = viewportStart + i;
-      const entry: Record<string, number | string> = { month: m };
-      for (const acc of visibleAccList) {
-        entry[acc.id] = deflate(result.balances[acc.id]?.[idx], idx);
-      }
-      return entry;
-    });
+    // Decide bar granularity based on pixels per month
+    const pxPerMonth = width / Math.max(viewMonths - 1, 1);
+    const barMode: "year" | "quarter" | "month" =
+      pxPerMonth < 7.2 ? "year" : pxPerMonth < 21.5 ? "quarter" : "month";
 
-    // X scale
+    const quarterKey = (m: string) => {
+      const [yr, mo] = m.split("-");
+      return `${yr}-Q${Math.ceil(parseInt(mo) / 3)}`;
+    };
+
+    // Build bar data (one entry per bar)
+    let barData: BarDatum[];
+    let barLabels: string[];
+
+    if (barMode === "year") {
+      const years = [...new Set(months.map(m => m.slice(0, 4)))];
+      barData = years.map(yr => {
+        const yearMonths = months.filter(m => m.startsWith(yr));
+        const lastMonth = yearMonths[yearMonths.length - 1];
+        const absIdx = result.months.indexOf(lastMonth);
+        const entry: BarDatum = { month: yr, _absIdx: absIdx };
+        for (const acc of visibleAccList) {
+          entry[acc.id] = deflate(result.balances[acc.id]?.[absIdx], absIdx);
+        }
+        return entry;
+      });
+      barLabels = years;
+    } else if (barMode === "quarter") {
+      const seen = new Set<string>();
+      const quarterKeys: string[] = [];
+      for (const m of months) {
+        const qk = quarterKey(m);
+        if (!seen.has(qk)) { seen.add(qk); quarterKeys.push(qk); }
+      }
+      barData = quarterKeys.map(qk => {
+        const qMonths = months.filter(m => quarterKey(m) === qk);
+        const lastMonth = qMonths[qMonths.length - 1];
+        const absIdx = result.months.indexOf(lastMonth);
+        const entry: BarDatum = { month: qk, _absIdx: absIdx };
+        for (const acc of visibleAccList) {
+          entry[acc.id] = deflate(result.balances[acc.id]?.[absIdx], absIdx);
+        }
+        return entry;
+      });
+      barLabels = quarterKeys;
+    } else {
+      barData = months.map((m, i) => {
+        const absIdx = viewportStart + i;
+        const entry: BarDatum = { month: m, _absIdx: absIdx };
+        for (const acc of visibleAccList) {
+          entry[acc.id] = deflate(result.balances[acc.id]?.[absIdx], absIdx);
+        }
+        return entry;
+      });
+      barLabels = months;
+    }
+
+    // X scale — scalePoint matches the anchor strip formula (i * width/(n-1))
+    // Bars are centered on each point; a clipPath prevents edge bars bleeding into margins.
     const xScale = d3.scalePoint<string>()
-      .domain(months)
-      .range([0, width]);
+      .domain(barLabels)
+      .range([0, width])
+      .padding(0);
+    const rawStep = barLabels.length > 1 ? xScale.step() : width;
+    const BAR_GAP = Math.min(8, Math.max(1.5, rawStep * 0.06));
+    const barWidth = Math.max(1, rawStep - BAR_GAP);
+    const barCenter = (i: number) => barLabels.length > 1 ? (xScale(barLabels[i]) ?? 0) : width / 2;
+    const barLeft = (i: number) => barCenter(i) - barWidth / 2;
 
     // Compute Y domain
     let yMin = 0;
     let yMax = 0;
-    for (const d of data) {
+    for (const d of barData) {
       let posSum = 0;
       let negSum = 0;
       for (const acc of visibleAccList) {
@@ -87,8 +148,6 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       yMax = Math.max(yMax, posSum);
       yMin = Math.min(yMin, negSum);
     }
-
-    // Add padding
     const range = yMax - yMin || 1;
     yMax += range * 0.05;
     yMin -= range * 0.05;
@@ -97,7 +156,33 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       .domain([yMin, yMax])
       .range([height, 0]);
 
-    // Draw gridlines
+    // Store layout info for crosshair.
+    // Map every viewport month to its bar center so timeline hover highlights the right bar.
+    const absIdxToX = new Map<number, number>();
+    if (barMode === "year") {
+      barData.forEach((d, i) => {
+        for (const m of months.filter(m => m.startsWith(barLabels[i]))) {
+          absIdxToX.set(result.months.indexOf(m), barCenter(i));
+        }
+      });
+    } else if (barMode === "quarter") {
+      barData.forEach((d, i) => {
+        for (const m of months.filter(m => quarterKey(m) === barLabels[i])) {
+          absIdxToX.set(result.months.indexOf(m), barCenter(i));
+        }
+      });
+    } else {
+      barData.forEach((d, i) => absIdxToX.set(d._absIdx, barCenter(i)));
+    }
+    layoutRef.current = {
+      marginLeft: margin.left,
+      marginTop: margin.top,
+      innerHeight: height,
+      step: rawStep,
+      absIdxToX,
+    };
+
+    // Gridlines
     g.append("g")
       .attr("class", "grid")
       .call(
@@ -108,93 +193,89 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       .call(g => g.select(".domain").remove())
       .call(g => g.selectAll(".tick line")
         .attr("stroke", "currentColor")
-        .attr("stroke-opacity", 0.1));
+        .attr("stroke-opacity", 0.06));
 
     // Zero line
     g.append("line")
       .attr("x1", 0).attr("x2", width)
       .attr("y1", yScale(0)).attr("y2", yScale(0))
       .attr("stroke", "currentColor")
-      .attr("stroke-opacity", 0.4)
+      .attr("stroke-opacity", 0.2)
       .attr("stroke-width", 1);
 
-    // Draw stacked areas
-    const posStack = d3.stack<Record<string, number | string>>()
+    // Clip bars so edge bars don't bleed into the y-axis margin
+    const clipId = "chart-clip";
+    g.append("clipPath").attr("id", clipId).append("rect").attr("width", width).attr("height", height);
+    const barsG = g.append("g").attr("clip-path", `url(#${clipId})`);
+
+    // Stacked bars
+    const posStack = d3.stack<BarDatum>()
       .keys(visibleAccList.map(a => a.id))
-      .value((d, key) => {
-        const v = (d[key] as number) || 0;
-        return v >= 0 ? v : 0;
-      })
+      .value((d, key) => { const v = (d[key] as number) || 0; return v >= 0 ? v : 0; })
       .order(d3.stackOrderNone)
       .offset(d3.stackOffsetNone);
 
-    const negStack = d3.stack<Record<string, number | string>>()
+    const negStack = d3.stack<BarDatum>()
       .keys(visibleAccList.map(a => a.id))
-      .value((d, key) => {
-        const v = (d[key] as number) || 0;
-        return v < 0 ? v : 0;
-      })
+      .value((d, key) => { const v = (d[key] as number) || 0; return v < 0 ? v : 0; })
       .order(d3.stackOrderNone)
       .offset(d3.stackOffsetNone);
 
-    const posLayers = posStack(data as Record<string, number | string>[]);
-    const negLayers = negStack(data as Record<string, number | string>[]);
-
-    const area = d3.area<d3.SeriesPoint<Record<string, number | string>>>()
-      .x((_, i) => xScale(months[i]) ?? 0)
-      .y0(d => yScale(d[0]))
-      .y1(d => yScale(d[1]))
-      .curve(d3.curveMonotoneX);
+    const posLayers = posStack(barData);
+    const negLayers = negStack(barData);
 
     const colorMap = Object.fromEntries(accounts.map(a => [a.id, a.color]));
 
-    // Draw positive layers
+    // Positive bars: y1 > y0, rect top = yScale(y1), height = yScale(y0) - yScale(y1)
     for (const layer of posLayers) {
       const accId = layer.key;
-      const isSelected = accId === selectedItemId;
-      g.append("path")
-        .datum(layer)
+      barsG.selectAll(null)
+        .data(layer)
+        .join("rect")
+        .attr("x", (_, i) => barLeft(i))
+        .attr("y", d => yScale(d[1]))
+        .attr("width", barWidth)
+        .attr("height", d => Math.max(0, yScale(d[0]) - yScale(d[1])))
         .attr("fill", colorMap[accId] ?? "#999")
-        .attr("fill-opacity", isSelected ? 1.0 : 0.9)
-        .attr("d", area);
+        .attr("fill-opacity", 1);
     }
 
-    // Draw negative layers
+    // Negative bars: y1 < y0, rect top = yScale(y0), height = yScale(y1) - yScale(y0)
     for (const layer of negLayers) {
       const accId = layer.key;
-      const isSelected = accId === selectedItemId;
-      g.append("path")
-        .datum(layer)
+      barsG.selectAll(null)
+        .data(layer)
+        .join("rect")
+        .attr("x", (_, i) => barLeft(i))
+        .attr("y", d => yScale(d[0]))
+        .attr("width", barWidth)
+        .attr("height", d => Math.max(0, yScale(d[1]) - yScale(d[0])))
         .attr("fill", colorMap[accId] ?? "#999")
-        .attr("fill-opacity", isSelected ? 1.0 : 0.9)
-        .attr("d", area);
+        .attr("fill-opacity", 1);
     }
 
-    // Net worth line
-    const netLine = d3.line<Record<string, number | string>>()
-      .x((_, i) => xScale(months[i]) ?? 0)
-      .y(d => {
-        let total = 0;
-        for (const acc of visibleAccList) total += (d[acc.id] as number) || 0;
-        return yScale(total);
-      })
-      .curve(d3.curveMonotoneX);
-
+    // Net worth line (connecting bar centers)
+    const netLineData = barData.map((d, i) => ({
+      x: barCenter(i),
+      y: yScale(visibleAccList.reduce((sum, acc) => sum + ((d[acc.id] as number) || 0), 0)),
+    }));
     g.append("path")
-      .datum(data)
+      .datum(netLineData)
       .attr("fill", "none")
       .attr("stroke", "currentColor")
       .attr("stroke-width", 2)
       .attr("stroke-dasharray", "4,2")
-      .attr("d", netLine);
+      .attr("d", d3.line<{ x: number; y: number }>().x(d => d.x).y(d => d.y));
 
     // Today marker
     const todayStr = (() => {
       const now = new Date();
       return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     })();
-    if (months.includes(todayStr)) {
-      const tx = xScale(todayStr) ?? 0;
+    const todayLabel = barMode === "year" ? todayStr.slice(0, 4) : barMode === "quarter" ? quarterKey(todayStr) : todayStr;
+    const todayBarIdx = barLabels.indexOf(todayLabel);
+    if (todayBarIdx >= 0) {
+      const tx = barCenter(todayBarIdx);
       g.append("line")
         .attr("x1", tx).attr("x2", tx)
         .attr("y1", 0).attr("y2", height)
@@ -202,80 +283,100 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
         .attr("stroke-width", 1.5)
         .attr("stroke-dasharray", "4,2");
       g.append("text")
-        .attr("x", tx + 4)
-        .attr("y", 12)
-        .attr("font-size", 10)
-        .attr("fill", "#f59e0b")
+        .attr("x", tx + 4).attr("y", 12)
+        .attr("font-size", 10).attr("fill", "#f59e0b")
         .text("Today");
     }
 
-    // Anchor lines (non-fixed only)
-    const anchorLineColor = getComputedStyle(document.documentElement).getPropertyValue("--anchor-line").trim();
-    for (const anchor of (scenario.anchors ?? []).filter(a => !a.fixed && months.includes(a.date))) {
-      const ax = xScale(anchor.date) ?? 0;
-      g.append("line")
-        .attr("x1", ax).attr("x2", ax)
-        .attr("y1", 0).attr("y2", height)
-        .attr("stroke", anchorLineColor)
-        .attr("stroke-width", 1);
-    }
-
-    // X axis — adaptive ticks based on zoom level
+    // X axis — adaptive ticks
     const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     let tickValues: string[];
     let tickLabel: (m: string) => string;
+    const MIN_PX = 35;
 
-    const pxPerMonth = width / Math.max(viewMonths - 1, 1);
-    const MIN_PX = 35; // minimum pixels between ticks
-
-    if (pxPerMonth * 1 >= MIN_PX) {
-      // Every month
-      tickValues = months;
-      tickLabel = m => {
-        const [yr, mo] = m.split("-");
-        const name = MONTH_NAMES[parseInt(mo) - 1];
-        return mo === "01" ? `${name} ${yr}` : name;
+    if (barMode === "year") {
+      const pxPerBar = width / Math.max(barLabels.length - 1, 1);
+      if (pxPerBar >= MIN_PX) {
+        tickValues = barLabels;
+      } else if (pxPerBar * 5 >= MIN_PX) {
+        tickValues = barLabels.filter(yr => parseInt(yr) % 5 === 0);
+      } else if (pxPerBar * 10 >= MIN_PX) {
+        tickValues = barLabels.filter(yr => parseInt(yr) % 10 === 0);
+      } else {
+        tickValues = barLabels.filter(yr => parseInt(yr) % 25 === 0);
+      }
+      tickLabel = yr => yr;
+    } else if (barMode === "quarter") {
+      const pxPerBar = width / Math.max(barLabels.length - 1, 1);
+      if (pxPerBar >= MIN_PX) {
+        tickValues = barLabels;
+      } else if (pxPerBar * 2 >= MIN_PX) {
+        tickValues = barLabels.filter(qk => qk.endsWith("Q1") || qk.endsWith("Q3"));
+      } else if (pxPerBar * 4 >= MIN_PX) {
+        tickValues = barLabels.filter(qk => qk.endsWith("Q1"));
+      } else if (pxPerBar * 20 >= MIN_PX) {
+        tickValues = barLabels.filter(qk => qk.endsWith("Q1") && parseInt(qk) % 5 === 0);
+      } else {
+        tickValues = barLabels.filter(qk => qk.endsWith("Q1") && parseInt(qk) % 10 === 0);
+      }
+      tickLabel = qk => {
+        const [yr, q] = qk.split("-");
+        return q === "Q1" ? yr : q;
       };
-    } else if (pxPerMonth * 3 >= MIN_PX) {
-      // Every quarter
-      tickValues = months.filter(m => ["01","04","07","10"].includes(m.slice(5)));
-      tickLabel = m => {
-        const [yr, mo] = m.split("-");
-        if (mo === "01") return yr;
-        return `${mo === "04" ? "Q2" : mo === "07" ? "Q3" : "Q4"} ${yr}`;
-      };
-    } else if (pxPerMonth * 12 >= MIN_PX) {
-      // Every year
-      tickValues = months.filter(m => m.endsWith("-01"));
-      tickLabel = m => m.slice(0, 4);
-    } else if (pxPerMonth * 60 >= MIN_PX) {
-      // Every 5 years
-      tickValues = months.filter(m => m.endsWith("-01") && parseInt(m) % 5 === 0);
-      tickLabel = m => m.slice(0, 4);
-    } else if (pxPerMonth * 120 >= MIN_PX) {
-      // Every 10 years
-      tickValues = months.filter(m => m.endsWith("-01") && parseInt(m) % 10 === 0);
-      tickLabel = m => m.slice(0, 4);
     } else {
-      // Every 25 years
-      tickValues = months.filter(m => m.endsWith("-01") && parseInt(m) % 25 === 0);
-      tickLabel = m => m.slice(0, 4);
+      if (pxPerMonth * 1 >= MIN_PX) {
+        tickValues = months;
+        tickLabel = m => {
+          const [yr, mo] = m.split("-");
+          const name = MONTH_NAMES[parseInt(mo) - 1];
+          return mo === "01" ? `${name} ${yr}` : name;
+        };
+      } else if (pxPerMonth * 3 >= MIN_PX) {
+        tickValues = months.filter(m => ["01","04","07","10"].includes(m.slice(5)));
+        tickLabel = m => {
+          const [yr, mo] = m.split("-");
+          if (mo === "01") return yr;
+          return `${mo === "04" ? "Q2" : mo === "07" ? "Q3" : "Q4"} ${yr}`;
+        };
+      } else if (pxPerMonth * 12 >= MIN_PX) {
+        tickValues = months.filter(m => m.endsWith("-01"));
+        tickLabel = m => m.slice(0, 4);
+      } else if (pxPerMonth * 60 >= MIN_PX) {
+        tickValues = months.filter(m => m.endsWith("-01") && parseInt(m) % 5 === 0);
+        tickLabel = m => m.slice(0, 4);
+      } else if (pxPerMonth * 120 >= MIN_PX) {
+        tickValues = months.filter(m => m.endsWith("-01") && parseInt(m) % 10 === 0);
+        tickLabel = m => m.slice(0, 4);
+      } else {
+        tickValues = months.filter(m => m.endsWith("-01") && parseInt(m) % 25 === 0);
+        tickLabel = m => m.slice(0, 4);
+      }
     }
 
-    const xAxisTicks = g.append("g")
-      .attr("transform", `translate(0,${height})`);
-
-    xAxisTicks.call(
-      d3.axisBottom(xScale)
-        .tickValues(tickValues)
-        .tickFormat(m => tickLabel(m as string))
-    );
+    g.append("g")
+      .attr("transform", `translate(0,${height})`)
+      .call(
+        d3.axisBottom(xScale)
+          .tickValues(tickValues)
+          .tickFormat(m => tickLabel(m as string))
+      );
 
     // Y axis
     g.append("g").call(
       d3.axisLeft(yScale)
         .tickFormat(d => formatCurrency(d as number, scenario.currencyLocale, scenario.currencySymbol))
     );
+
+    // Helper: find closest bar index from mouse x position
+    const findBarIdx = (mx: number): number => {
+      let closest = 0;
+      let closestDist = Infinity;
+      barLabels.forEach((_, i) => {
+        const dist = Math.abs(mx - barCenter(i));
+        if (dist < closestDist) { closestDist = dist; closest = i; }
+      });
+      return closest;
+    };
 
     // Tooltip overlay
     const overlay = g.append("rect")
@@ -288,27 +389,22 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
 
     overlay.on("mousemove", (event: MouseEvent) => {
       const [mx] = d3.pointer(event);
-      const domain = xScale.domain();
-      const step = width / (domain.length - 1 || 1);
-      const idx = Math.round(mx / step);
-      const clampedIdx = Math.max(0, Math.min(idx, domain.length - 1));
-      const month = domain[clampedIdx];
-      const monthIdx = viewportStart + clampedIdx;
+      const barIdx = findBarIdx(mx);
+      const datum = barData[barIdx];
+      const absIdx = datum._absIdx;
 
-      onHoverIdx(monthIdx);
+      onHoverIdx(absIdx);
 
       let total = 0;
-      let html = `<div class="font-semibold mb-1">${month}</div>`;
+      let html = `<div class="font-semibold mb-1">${datum.month as string}</div>`;
       for (const acc of visibleAccList) {
-        const v = deflate(result.balances[acc.id]?.[monthIdx], monthIdx);
-        if (v !== null && v !== undefined) {
-          total += v;
-          html += `<div class="flex items-center gap-1">
-            <span style="background:${colorMap[acc.id]}" class="inline-block w-2 h-2 rounded-full"></span>
-            <span>${acc.name}:</span>
-            <span class="font-medium">${formatCurrency(v, scenario.currencyLocale, scenario.currencySymbol)}</span>
-          </div>`;
-        }
+        const v = datum[acc.id] as number;
+        total += v || 0;
+        html += `<div class="flex items-center gap-1">
+          <span style="background:${colorMap[acc.id]}" class="inline-block w-2 h-2 rounded-full"></span>
+          <span>${acc.name}:</span>
+          <span class="font-medium">${formatCurrency(v, scenario.currencyLocale, scenario.currencySymbol)}</span>
+        </div>`;
       }
       html += `<div class="border-t mt-1 pt-1 font-semibold">Net: ${formatCurrency(total, scenario.currencyLocale, scenario.currencySymbol)}</div>`;
 
@@ -329,14 +425,11 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
     overlay.on("click", (event: MouseEvent) => {
       if (!onSelectItem) return;
       const [mx, my] = d3.pointer(event);
-      const domain = xScale.domain();
-      const step = width / (domain.length - 1 || 1);
-      const clampedIdx = Math.max(0, Math.min(Math.round(mx / step), domain.length - 1));
+      const barIdx = findBarIdx(mx);
 
-      // Check positive layers top-to-bottom (last drawn is on top visually)
       for (let li = posLayers.length - 1; li >= 0; li--) {
         const layer = posLayers[li];
-        const point = layer[clampedIdx];
+        const point = layer[barIdx];
         if (!point) continue;
         const yTop = yScale(point[1]);
         const yBot = yScale(point[0]);
@@ -347,13 +440,13 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
         }
       }
 
-      // Check negative layers top-to-bottom
       for (let li = negLayers.length - 1; li >= 0; li--) {
         const layer = negLayers[li];
-        const point = layer[clampedIdx];
+        const point = layer[barIdx];
         if (!point) continue;
-        const yTop = yScale(point[1]);
-        const yBot = yScale(point[0]);
+        // For negative layers: y0 > y1 in value space, so yScale(y0) < yScale(y1) in screen space
+        const yTop = yScale(point[0]);
+        const yBot = yScale(point[1]);
         if (my >= yTop && my <= yBot && point[1] !== point[0]) {
           const newId = layer.key === selectedItemId ? null : layer.key;
           onSelectItem(newId, newId ? "account" : null);
@@ -361,7 +454,6 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
         }
       }
 
-      // Clicked outside any area — deselect
       onSelectItem(null, null);
     });
 
@@ -372,10 +464,9 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
 
   const crosshairX = (() => {
     if (hoveredIdx === null || hoveredAnchorId !== null || !layoutRef.current) return null;
-    const viewIdx = hoveredIdx - viewportStart;
-    const viewMonths = viewportEnd - viewportStart + 1;
-    if (viewIdx < 0 || viewIdx >= viewMonths) return null;
-    return layoutRef.current.marginLeft + viewIdx * layoutRef.current.step;
+    const { marginLeft, absIdxToX } = layoutRef.current;
+    const cx = absIdxToX?.get(hoveredIdx);
+    return cx !== undefined ? marginLeft + cx : null;
   })();
 
   return (

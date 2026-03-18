@@ -936,7 +936,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
         const r = scenario.inflationRate;
         const inflationOn = scenario.inflationEnabled && r !== 0;
-        const notHedged = (t.inflationHedged ?? true) === false;
+        const notHedged = (t.inflationAdjusted ?? false) === true;
         const sym = scenario.currencySymbol;
         const loc = scenario.currencyLocale;
 

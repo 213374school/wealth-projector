@@ -126,28 +126,28 @@ describe("Case 6: Gains-only with no gains", () => {
   });
 });
 
-describe("Case 7: Inflation hedging", () => {
-  it("non-hedged fixed transfer scales up with inflation: nominal withdrawal at month 12 is 1020", () => {
+describe("Case 7: Inflation adjustment", () => {
+  it("inflation-adjusted fixed transfer scales up: nominal withdrawal at month 12 is 1020", () => {
     const acc = makeAccount({ id: "acc1", initialBalance: 100000 });
-    const transfer = makeTransfer({ amount: 1000, inflationHedged: false, isOneTime: true, startDate: "2025-01" });
+    const transfer = makeTransfer({ amount: 1000, inflationAdjusted: true, isOneTime: true, startDate: "2025-01" });
     const scenario = makeScenario({ accounts: [acc], transfers: [transfer], timelineStart: "2024-01", timelineEnd: "2025-02", inflationRate: 0.02, inflationEnabled: true });
     const result = runSimulation(scenario);
     expect(result.balances["acc1"][12]).toBeCloseTo(98980 / 1.02, 1);
   });
 
-  it("hedged fixed transfer does NOT inflate: nominal withdrawal at month 12 stays 1000", () => {
+  it("fixed-nominal transfer does NOT inflate: nominal withdrawal at month 12 stays 1000", () => {
     const acc = makeAccount({ id: "acc1", initialBalance: 100000 });
-    const transfer = makeTransfer({ amount: 1000, inflationHedged: true, isOneTime: true, startDate: "2025-01" });
+    const transfer = makeTransfer({ amount: 1000, inflationAdjusted: false, isOneTime: true, startDate: "2025-01" });
     const scenario = makeScenario({ accounts: [acc], transfers: [transfer], timelineStart: "2024-01", timelineEnd: "2025-02", inflationRate: 0.02, inflationEnabled: true });
     const result = runSimulation(scenario);
     expect(result.balances["acc1"][12]).toBeCloseTo(99000 / 1.02, 1);
   });
 
-  it("missing inflationHedged field defaults to hedged (true)", () => {
+  it("missing inflationAdjusted field defaults to false (fixed nominal)", () => {
     const acc1 = makeAccount({ id: "acc1", initialBalance: 100000 });
     const acc2 = makeAccount({ id: "acc1", initialBalance: 100000 });
     const tWithout = makeTransfer({ amount: 1000, isOneTime: false, period: "monthly" });
-    const tWith = makeTransfer({ amount: 1000, inflationHedged: true, isOneTime: false, period: "monthly" });
+    const tWith = makeTransfer({ amount: 1000, inflationAdjusted: false, isOneTime: false, period: "monthly" });
     const s1 = makeScenario({ accounts: [acc1], transfers: [tWithout], inflationRate: 0.02, inflationEnabled: true, timelineEnd: "2025-01" });
     const s2 = makeScenario({ accounts: [acc2], transfers: [tWith], inflationRate: 0.02, inflationEnabled: true, timelineEnd: "2025-01" });
     const r1 = runSimulation(s1);
@@ -157,11 +157,11 @@ describe("Case 7: Inflation hedging", () => {
     }
   });
 
-  it("percent-balance transfer is unaffected by inflationHedged flag", () => {
+  it("percent-balance transfer is unaffected by inflationAdjusted flag", () => {
     const acc1 = makeAccount({ id: "acc1", initialBalance: 100000 });
     const acc2 = makeAccount({ id: "acc1", initialBalance: 100000 });
-    const t1 = makeTransfer({ amount: 0.01, amountType: "percent-balance", inflationHedged: false, isOneTime: false, period: "monthly" });
-    const t2 = makeTransfer({ amount: 0.01, amountType: "percent-balance", inflationHedged: true, isOneTime: false, period: "monthly" });
+    const t1 = makeTransfer({ amount: 0.01, amountType: "percent-balance", inflationAdjusted: true, isOneTime: false, period: "monthly" });
+    const t2 = makeTransfer({ amount: 0.01, amountType: "percent-balance", inflationAdjusted: false, isOneTime: false, period: "monthly" });
     const s1 = makeScenario({ accounts: [acc1], transfers: [t1], inflationRate: 0.02, inflationEnabled: true, timelineEnd: "2025-01" });
     const s2 = makeScenario({ accounts: [acc2], transfers: [t2], inflationRate: 0.02, inflationEnabled: true, timelineEnd: "2025-01" });
     const r1 = runSimulation(s1);
@@ -732,23 +732,23 @@ describe("Inflation: deflation display transform", () => {
 
 // ─── Inflation: fixed transfer hedging ───────────────────────────────────────
 
-describe("Inflation: fixed transfer hedging — no inflation", () => {
-  it("inflationEnabled=false: non-hedged amount is NOT scaled", () => {
+describe("Inflation: fixed transfer adjustment — no inflation", () => {
+  it("inflationEnabled=false: inflationAdjusted amount is NOT scaled", () => {
     const acc = makeAccount({ id: "acc1", initialBalance: 100000 });
-    const t = makeTransfer({ amount: 1000, inflationHedged: false, isOneTime: true, startDate: "2025-01" });
+    const t = makeTransfer({ amount: 1000, inflationAdjusted: true, isOneTime: true, startDate: "2025-01" });
     const scenario = makeScenario({ accounts: [acc], transfers: [t], timelineStart: "2024-01", timelineEnd: "2025-02", inflationRate: 0.02, inflationEnabled: false });
     const result = runSimulation(scenario);
     // No inflation enabled → no scaling, no deflation → balance = 100000 - 1000 = 99000
     expect(result.balances["acc1"][12]).toBeCloseTo(99000);
   });
 
-  it("inflationEnabled=false: hedged and non-hedged produce identical results", () => {
+  it("inflationEnabled=false: fixed-nominal and inflation-adjusted produce identical results", () => {
     const acc1 = makeAccount({ id: "acc1", initialBalance: 100000 });
     const acc2 = makeAccount({ id: "acc1", initialBalance: 100000 });
-    const tHedged = makeTransfer({ amount: 1000, inflationHedged: true, isOneTime: false, period: "monthly" });
-    const tNotHedged = makeTransfer({ amount: 1000, inflationHedged: false, isOneTime: false, period: "monthly" });
-    const s1 = makeScenario({ accounts: [acc1], transfers: [tHedged], inflationRate: 0.03, inflationEnabled: false, timelineEnd: "2024-12" });
-    const s2 = makeScenario({ accounts: [acc2], transfers: [tNotHedged], inflationRate: 0.03, inflationEnabled: false, timelineEnd: "2024-12" });
+    const tFixed = makeTransfer({ amount: 1000, inflationAdjusted: false, isOneTime: false, period: "monthly" });
+    const tAdjusted = makeTransfer({ amount: 1000, inflationAdjusted: true, isOneTime: false, period: "monthly" });
+    const s1 = makeScenario({ accounts: [acc1], transfers: [tFixed], inflationRate: 0.03, inflationEnabled: false, timelineEnd: "2024-12" });
+    const s2 = makeScenario({ accounts: [acc2], transfers: [tAdjusted], inflationRate: 0.03, inflationEnabled: false, timelineEnd: "2024-12" });
     const r1 = runSimulation(s1);
     const r2 = runSimulation(s2);
     for (let i = 0; i < 12; i++) {
@@ -757,28 +757,28 @@ describe("Inflation: fixed transfer hedging — no inflation", () => {
   });
 });
 
-describe("Inflation: fixed transfer hedging — with inflation", () => {
-  it("non-hedged at i=0: deflator=1, withdrawal is exactly the entered amount", () => {
+describe("Inflation: fixed transfer adjustment — with inflation", () => {
+  it("inflation-adjusted at i=0: deflator=1, withdrawal is exactly the entered amount", () => {
     const acc = makeAccount({ id: "acc1", initialBalance: 100000 });
-    const t = makeTransfer({ amount: 1000, inflationHedged: false, isOneTime: true, startDate: "2024-01" });
+    const t = makeTransfer({ amount: 1000, inflationAdjusted: true, isOneTime: true, startDate: "2024-01" });
     const scenario = makeScenario({ accounts: [acc], transfers: [t], inflationRate: 0.02, inflationEnabled: true });
     const result = runSimulation(scenario);
     // i=0: 1.02^0 = 1 → nominal = 1000, deflated balance = 99000
     expect(result.balances["acc1"][0]).toBeCloseTo(99000);
   });
 
-  it("non-hedged at i=12: nominal withdrawal = amount * 1.02^1", () => {
+  it("inflation-adjusted at i=12: nominal withdrawal = amount * 1.02^1", () => {
     // nominal = 1000 * 1.02 = 1020; deflated balance = (100000-1020)/1.02 = 98980/1.02
     const acc = makeAccount({ id: "acc1", initialBalance: 100000 });
-    const t = makeTransfer({ amount: 1000, inflationHedged: false, isOneTime: true, startDate: "2025-01" });
+    const t = makeTransfer({ amount: 1000, inflationAdjusted: true, isOneTime: true, startDate: "2025-01" });
     const scenario = makeScenario({ accounts: [acc], transfers: [t], timelineStart: "2024-01", timelineEnd: "2025-02", inflationRate: 0.02, inflationEnabled: true });
     const result = runSimulation(scenario);
     expect(result.balances["acc1"][12]).toBeCloseTo(98980 / 1.02, 1);
   });
 
-  it("non-hedged at i=6: nominal withdrawal = amount * 1.02^0.5", () => {
+  it("inflation-adjusted at i=6: nominal withdrawal = amount * 1.02^0.5", () => {
     const acc = makeAccount({ id: "acc1", initialBalance: 100000 });
-    const t = makeTransfer({ amount: 1000, inflationHedged: false, isOneTime: true, startDate: "2024-07" });
+    const t = makeTransfer({ amount: 1000, inflationAdjusted: true, isOneTime: true, startDate: "2024-07" });
     const scenario = makeScenario({ accounts: [acc], transfers: [t], inflationRate: 0.02, inflationEnabled: true });
     const result = runSimulation(scenario);
     const d6 = Math.pow(1.02, 6 / 12);
@@ -786,30 +786,30 @@ describe("Inflation: fixed transfer hedging — with inflation", () => {
     expect(result.balances["acc1"][6]).toBeCloseTo((100000 - nominal) / d6, 2);
   });
 
-  it("hedged at i=12: nominal withdrawal stays at entered amount", () => {
+  it("fixed-nominal at i=12: nominal withdrawal stays at entered amount", () => {
     // nominal = 1000; deflated balance = 99000/1.02
     const acc = makeAccount({ id: "acc1", initialBalance: 100000 });
-    const t = makeTransfer({ amount: 1000, inflationHedged: true, isOneTime: true, startDate: "2025-01" });
+    const t = makeTransfer({ amount: 1000, inflationAdjusted: false, isOneTime: true, startDate: "2025-01" });
     const scenario = makeScenario({ accounts: [acc], transfers: [t], timelineStart: "2024-01", timelineEnd: "2025-02", inflationRate: 0.02, inflationEnabled: true });
     const result = runSimulation(scenario);
     expect(result.balances["acc1"][12]).toBeCloseTo(99000 / 1.02, 1);
   });
 
-  it("non-hedged produces lower displayed balance than hedged at month 12", () => {
-    const mkScenario = (hedged: boolean) => {
+  it("inflation-adjusted produces lower displayed balance than fixed-nominal at month 12", () => {
+    const mkScenario = (adjusted: boolean) => {
       const acc = makeAccount({ id: "acc1", initialBalance: 100000 });
-      const t = makeTransfer({ amount: 1000, inflationHedged: hedged, isOneTime: false, period: "monthly" });
+      const t = makeTransfer({ amount: 1000, inflationAdjusted: adjusted, isOneTime: false, period: "monthly" });
       return makeScenario({ accounts: [acc], transfers: [t], timelineStart: "2024-01", timelineEnd: "2025-01", inflationRate: 0.02, inflationEnabled: true });
     };
-    const rNot = runSimulation(mkScenario(false));
-    const rHedged = runSimulation(mkScenario(true));
-    // Non-hedged withdraws more in nominal terms → lower real balance
-    expect(rNot.balances["acc1"][12] as number).toBeLessThan(rHedged.balances["acc1"][12] as number);
+    const rAdjusted = runSimulation(mkScenario(true));
+    const rFixed = runSimulation(mkScenario(false));
+    // Inflation-adjusted withdraws more in nominal terms → lower real balance
+    expect(rAdjusted.balances["acc1"][12] as number).toBeLessThan(rFixed.balances["acc1"][12] as number);
   });
 
-  it("recurring non-hedged: each month i uses its own deflator in the scaling formula", () => {
+  it("recurring inflation-adjusted: each month i uses its own deflator in the scaling formula", () => {
     const acc = makeAccount({ id: "acc1", initialBalance: 100000 });
-    const t = makeTransfer({ amount: 1000, inflationHedged: false, isOneTime: false, period: "monthly" });
+    const t = makeTransfer({ amount: 1000, inflationAdjusted: true, isOneTime: false, period: "monthly" });
     const scenario = makeScenario({ accounts: [acc], transfers: [t], timelineEnd: "2024-06", inflationRate: 0.02, inflationEnabled: true });
     const result = runSimulation(scenario);
     let nomBal = 100000;
@@ -820,9 +820,9 @@ describe("Inflation: fixed transfer hedging — with inflation", () => {
     }
   });
 
-  it("recurring hedged: each month nominal = 1000, real = 1000/deflator", () => {
+  it("recurring fixed-nominal: each month nominal = 1000, real = 1000/deflator", () => {
     const acc = makeAccount({ id: "acc1", initialBalance: 100000 });
-    const t = makeTransfer({ amount: 1000, inflationHedged: true, isOneTime: false, period: "monthly" });
+    const t = makeTransfer({ amount: 1000, inflationAdjusted: false, isOneTime: false, period: "monthly" });
     const scenario = makeScenario({ accounts: [acc], transfers: [t], timelineEnd: "2024-06", inflationRate: 0.02, inflationEnabled: true });
     const result = runSimulation(scenario);
     for (let i = 0; i < 6; i++) {
@@ -832,14 +832,14 @@ describe("Inflation: fixed transfer hedging — with inflation", () => {
     }
   });
 
-  it("undefined inflationHedged behaves identically to explicit true", () => {
+  it("undefined inflationAdjusted behaves identically to explicit false (fixed nominal)", () => {
     const acc1 = makeAccount({ id: "acc1", initialBalance: 100000 });
     const acc2 = makeAccount({ id: "acc1", initialBalance: 100000 });
-    // makeTransfer does not set inflationHedged by default (undefined)
+    // makeTransfer does not set inflationAdjusted by default (undefined)
     const tUndefined = makeTransfer({ amount: 1000, isOneTime: false, period: "monthly" });
-    const tTrue = makeTransfer({ amount: 1000, inflationHedged: true, isOneTime: false, period: "monthly" });
+    const tFalse = makeTransfer({ amount: 1000, inflationAdjusted: false, isOneTime: false, period: "monthly" });
     const s1 = makeScenario({ accounts: [acc1], transfers: [tUndefined], inflationRate: 0.04, inflationEnabled: true, timelineEnd: "2025-01" });
-    const s2 = makeScenario({ accounts: [acc2], transfers: [tTrue], inflationRate: 0.04, inflationEnabled: true, timelineEnd: "2025-01" });
+    const s2 = makeScenario({ accounts: [acc2], transfers: [tFalse], inflationRate: 0.04, inflationEnabled: true, timelineEnd: "2025-01" });
     const r1 = runSimulation(s1);
     const r2 = runSimulation(s2);
     for (let i = 0; i < 13; i++) {
@@ -848,11 +848,11 @@ describe("Inflation: fixed transfer hedging — with inflation", () => {
   });
 });
 
-describe("Inflation: non-fixed amountTypes unaffected by inflationHedged", () => {
-  it("gains-only: inflationHedged=false produces same result as inflationHedged=true", () => {
-    const mkSetup = (hedged: boolean) => {
+describe("Inflation: non-fixed amountTypes unaffected by inflationAdjusted", () => {
+  it("gains-only: inflationAdjusted=true produces same result as inflationAdjusted=false", () => {
+    const mkSetup = (adjusted: boolean) => {
       const acc = makeAccount({ id: "acc1", initialBalance: 10000, growthRate: 0.5, growthPeriod: "yearly" });
-      const t = makeTransfer({ sourceAccountId: "acc1", targetAccountId: "acc1", amount: 0, amountType: "gains-only", inflationHedged: hedged, taxRate: 0.10, isOneTime: true, startDate: "2024-02" });
+      const t = makeTransfer({ sourceAccountId: "acc1", targetAccountId: "acc1", amount: 0, amountType: "gains-only", inflationAdjusted: adjusted, taxRate: 0.10, isOneTime: true, startDate: "2024-02" });
       return makeScenario({ accounts: [acc], transfers: [t], timelineEnd: "2024-03", inflationRate: 0.03, inflationEnabled: true });
     };
     const r1 = runSimulation(mkSetup(false));
@@ -901,7 +901,7 @@ describe("Edge cases", () => {
   it("zero inflationRate with inflation enabled: no scaling and no deflation", () => {
     // inflationRate=0 means the `inflationRate !== 0` guard skips both the scaling and deflation loops
     const acc = makeAccount({ id: "acc1", initialBalance: 50000 });
-    const t = makeTransfer({ amount: 500, inflationHedged: false, isOneTime: false, period: "monthly" });
+    const t = makeTransfer({ amount: 500, inflationAdjusted: true, isOneTime: false, period: "monthly" });
     const scenario = makeScenario({ accounts: [acc], transfers: [t], inflationRate: 0, inflationEnabled: true, timelineEnd: "2024-12" });
     const result = runSimulation(scenario);
     // Same as no inflation: each month withdraws exactly 500
@@ -913,10 +913,10 @@ describe("Edge cases", () => {
 
 // ─── SECTION A: Inflation Semantics ──────────────────────────────────────────
 
-describe("A1: Non-hedged invariant: real withdrawal = entered amount each month", () => {
+describe("A1: Inflation-adjusted invariant: real withdrawal = entered amount each month", () => {
   it("reconstructed nominal withdrawal divided by deflator equals entered amount", () => {
     const acc = makeAccount({ id: "acc1", initialBalance: 100000, growthRate: 0 });
-    const t = makeTransfer({ amount: 1000, inflationHedged: false, isOneTime: false, period: "monthly" });
+    const t = makeTransfer({ amount: 1000, inflationAdjusted: true, isOneTime: false, period: "monthly" });
     const scenario = makeScenario({ accounts: [acc], transfers: [t], inflationRate: 0.03, inflationEnabled: true, timelineEnd: "2024-06" });
     const result = runSimulation(scenario);
     const r = 0.03;
@@ -932,10 +932,10 @@ describe("A1: Non-hedged invariant: real withdrawal = entered amount each month"
   });
 });
 
-describe("A2: Hedged invariant: nominal withdrawal constant, real spending power shrinks", () => {
+describe("A2: Fixed-nominal invariant: nominal withdrawal constant, real spending power shrinks", () => {
   it("reconstructed nominal withdrawal is constant at entered amount", () => {
     const acc = makeAccount({ id: "acc1", initialBalance: 100000, growthRate: 0 });
-    const t = makeTransfer({ amount: 1000, inflationHedged: true, isOneTime: false, period: "monthly" });
+    const t = makeTransfer({ amount: 1000, inflationAdjusted: false, isOneTime: false, period: "monthly" });
     const scenario = makeScenario({ accounts: [acc], transfers: [t], inflationRate: 0.03, inflationEnabled: true, timelineEnd: "2024-06" });
     const result = runSimulation(scenario);
     const r = 0.03;
@@ -946,9 +946,9 @@ describe("A2: Hedged invariant: nominal withdrawal constant, real spending power
     }
   });
 
-  it("real purchasing power of each hedged withdrawal is strictly decreasing", () => {
+  it("real purchasing power of each fixed-nominal withdrawal is strictly decreasing", () => {
     const r = 0.03;
-    // Real cost of hedged withdrawal at month i = 1000 / (1+r)^(i/12) — decreases as i grows
+    // Real cost of fixed-nominal withdrawal at month i = 1000 / (1+r)^(i/12) — decreases as i grows
     const realCosts = Array.from({ length: 5 }, (_, k) => 1000 / Math.pow(1 + r, (k + 1) / 12));
     for (let i = 1; i < realCosts.length; i++) {
       expect(realCosts[i - 1]).toBeGreaterThan(realCosts[i]);
@@ -956,20 +956,20 @@ describe("A2: Hedged invariant: nominal withdrawal constant, real spending power
   });
 });
 
-describe("A3: Non-hedged vs hedged: display balances diverge after month 0", () => {
-  it("both show same balance at i=0 (deflator=1), non-hedged lower thereafter", () => {
-    const mkSetup = (hedged: boolean) => {
+describe("A3: Inflation-adjusted vs fixed-nominal: display balances diverge after month 0", () => {
+  it("both show same balance at i=0 (deflator=1), inflation-adjusted lower thereafter", () => {
+    const mkSetup = (adjusted: boolean) => {
       const acc = makeAccount({ id: "acc1", initialBalance: 100000, growthRate: 0 });
-      const t = makeTransfer({ amount: 1000, inflationHedged: hedged, isOneTime: false, period: "monthly" });
+      const t = makeTransfer({ amount: 1000, inflationAdjusted: adjusted, isOneTime: false, period: "monthly" });
       return makeScenario({ accounts: [acc], transfers: [t], inflationRate: 0.03, inflationEnabled: true, timelineEnd: "2024-06" });
     };
-    const rNH = runSimulation(mkSetup(false));
-    const rH  = runSimulation(mkSetup(true));
-    // At i=0: both scenarios withdraw 1000 nominal (deflator[0]=1, non-hedged scales by (1.03)^0=1)
-    expect(rNH.balances["acc1"][0]).toBeCloseTo(rH.balances["acc1"][0] as number, 4);
-    // At i>0: non-hedged withdraws more in nominal terms → lower displayed balance
+    const rAdj = runSimulation(mkSetup(true));
+    const rFixed = runSimulation(mkSetup(false));
+    // At i=0: both scenarios withdraw 1000 nominal (deflator[0]=1, adjusted scales by (1.03)^0=1)
+    expect(rAdj.balances["acc1"][0]).toBeCloseTo(rFixed.balances["acc1"][0] as number, 4);
+    // At i>0: adjusted withdraws more in nominal terms → lower displayed balance
     for (let i = 1; i < 6; i++) {
-      expect(rNH.balances["acc1"][i] as number).toBeLessThan(rH.balances["acc1"][i] as number);
+      expect(rAdj.balances["acc1"][i] as number).toBeLessThan(rFixed.balances["acc1"][i] as number);
     }
   });
 });
@@ -995,7 +995,7 @@ describe("A4: Inflation + Growth: real return ≈ (1 + growthRate) / (1 + inflat
 describe("A5: Inflation + Growth + Non-Hedged Transfer: full interaction", () => {
   it("displayed balance matches manual month-by-month computation", () => {
     const acc = makeAccount({ id: "acc1", initialBalance: 10000, growthRate: 0.05, growthPeriod: "monthly" });
-    const t = makeTransfer({ amount: 200, inflationHedged: false, isOneTime: false, period: "monthly" });
+    const t = makeTransfer({ amount: 200, inflationAdjusted: true, isOneTime: false, period: "monthly" });
     const scenario = makeScenario({ accounts: [acc], transfers: [t], inflationRate: 0.02, inflationEnabled: true, timelineEnd: "2024-12" });
     const result = runSimulation(scenario);
     const r = 0.02;
@@ -1447,9 +1447,9 @@ describe("G5: Very high inflation rate (50% annual)", () => {
     expect(result.balances["acc1"][12]).toBeCloseTo(10000 / 1.50, 2);
   });
 
-  it("non-hedged nominal withdrawal at i=6 scales by (1.5)^(6/12)", () => {
+  it("inflation-adjusted nominal withdrawal at i=6 scales by (1.5)^(6/12)", () => {
     const acc = makeAccount({ id: "acc1", initialBalance: 100000, growthRate: 0 });
-    const t = makeTransfer({ amount: 1000, inflationHedged: false, isOneTime: false, period: "monthly" });
+    const t = makeTransfer({ amount: 1000, inflationAdjusted: true, isOneTime: false, period: "monthly" });
     const scenario = makeScenario({ accounts: [acc], transfers: [t], inflationRate: 0.50, inflationEnabled: true, timelineEnd: "2024-07" });
     const result = runSimulation(scenario);
     const r = 0.50;
@@ -1494,9 +1494,9 @@ describe("G7: Yearly transfer starting mid-year fires on startDate offset", () =
 // ─── SECTION H: Integration Tests ────────────────────────────────────────────
 
 describe("H1: Retirement drawdown scenario: portfolio survives 20 years", () => {
-  it("$500k at 6% growth with $2500/month non-hedged at 2% inflation stays positive for 240 months", () => {
+  it("$500k at 6% growth with $2500/month inflation-adjusted at 2% inflation stays positive for 240 months", () => {
     const acc = makeAccount({ id: "acc1", initialBalance: 500000, growthRate: 0.06, growthPeriod: "yearly", initialPrincipalRatio: 1 });
-    const t = makeTransfer({ amount: 2500, inflationHedged: false, isOneTime: false, period: "monthly" });
+    const t = makeTransfer({ amount: 2500, inflationAdjusted: true, isOneTime: false, period: "monthly" });
     const scenario = makeScenario({
       accounts: [acc], transfers: [t],
       timelineStart: "2024-01", timelineEnd: "2043-12",

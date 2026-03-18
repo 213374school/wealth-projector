@@ -47,7 +47,7 @@ function applyTransfer(
     if (
       scenario.inflationEnabled &&
       scenario.inflationRate !== 0 &&
-      (t.inflationHedged ?? true) === false
+      (t.inflationAdjusted ?? false) === true
     ) {
       resolvedAmount = t.amount * Math.pow(1 + scenario.inflationRate, monthIndex / 12);
     }

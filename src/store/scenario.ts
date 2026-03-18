@@ -366,7 +366,7 @@ export const useScenarioStore = create<ScenarioStore>()(
             period: "monthly",
             taxRate: 0,
             taxBasis: "full",
-            inflationHedged: false,
+            inflationAdjusted: false,
           };
           const updated: Scenario = ensureSingleEdgeAnchors({
             ...scenario,
@@ -401,7 +401,7 @@ export const useScenarioStore = create<ScenarioStore>()(
             period: "monthly",
             taxRate: 0,
             taxBasis: "full",
-            inflationHedged: false,
+            inflationAdjusted: false,
           };
           let updated: Scenario = ensureSingleEdgeAnchors({
             ...scenario,

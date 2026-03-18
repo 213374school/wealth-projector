@@ -203,15 +203,15 @@ export function TransferEditor({ transfer, accounts }: Props) {
       )}
 
       {transfer.amountType === "fixed" && (
-        <Field label={`Inflation hedged${!inflationEnabled ? " (applies when inflation is enabled)" : ""}`}>
+        <Field label={`Inflation${!inflationEnabled ? " (applies when inflation is enabled)" : ""}`}>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input
               type="checkbox"
-              checked={transfer.inflationHedged ?? true}
-              onChange={e => update("inflationHedged", e.target.checked)}
+              checked={transfer.inflationAdjusted ?? false}
+              onChange={e => update("inflationAdjusted", e.target.checked)}
               className="accent-violet-600"
             />
-            Fixed nominal amount
+            Adjust with inflation
           </label>
         </Field>
       )}

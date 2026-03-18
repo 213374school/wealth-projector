@@ -1592,3 +1592,238 @@ describe("S3: Transfer chain A→B→C: C draws from B's post-credit balance for
     expect(result.balances["acc3"][0]).toBeCloseTo(2500);
   });
 });
+
+// ─── Section I: Simulation Invariants ────────────────────────────────────────
+
+describe("I1: principal ≤ balance holds at every month for positive-balance accounts", () => {
+  it("principal never exceeds balance across 24 months with growth and transfers", () => {
+    const acc1 = makeAccount({ id: "acc1", initialBalance: 50000, initialPrincipalRatio: 0.6, growthRate: 0.07, growthPeriod: "yearly" });
+    const acc2 = makeAccount({ id: "acc2", initialBalance: 0, growthRate: 0 });
+    const t1 = makeTransfer({ id: "t1", sourceAccountId: "acc1", targetAccountId: "acc2", amount: 500, amountType: "fixed", taxRate: 0 });
+    const scenario = makeScenario({ accounts: [acc1, acc2], transfers: [t1], timelineStart: "2024-01", timelineEnd: "2025-12" });
+    const result = runSimulation(scenario);
+    for (let i = 0; i < result.months.length; i++) {
+      for (const id of ["acc1", "acc2"]) {
+        const bal = result.balances[id][i] as number;
+        const pri = result.principals[id][i] as number;
+        if (bal > 0) {
+          expect(pri).toBeLessThanOrEqual(bal + 1e-9);
+        }
+      }
+    }
+  });
+});
+
+describe("I2: principal ≥ balance holds at every month when balance is negative", () => {
+  it("principal is clamped at or above balance when account goes into deficit", () => {
+    const acc1 = makeAccount({ id: "acc1", initialBalance: 1000, initialPrincipalRatio: 1, growthRate: 0 });
+    const t1 = makeTransfer({ id: "t1", sourceAccountId: "acc1", targetAccountId: null, amount: 500, amountType: "fixed", taxRate: 0 });
+    const scenario = makeScenario({ accounts: [acc1], transfers: [t1], timelineStart: "2024-01", timelineEnd: "2024-06" });
+    const result = runSimulation(scenario);
+    for (let i = 0; i < result.months.length; i++) {
+      const bal = result.balances["acc1"][i] as number;
+      const pri = result.principals["acc1"][i] as number;
+      if (bal < 0) {
+        expect(pri).toBeGreaterThanOrEqual(bal - 1e-9);
+      }
+    }
+  });
+});
+
+describe("I3: zero-tax system conserves total balance across all months", () => {
+  it("sum of all account balances equals initial total at every month", () => {
+    const acc1 = makeAccount({ id: "acc1", initialBalance: 20000, growthRate: 0 });
+    const acc2 = makeAccount({ id: "acc2", initialBalance: 5000, growthRate: 0 });
+    const acc3 = makeAccount({ id: "acc3", initialBalance: 0, growthRate: 0 });
+    const t1 = makeTransfer({ id: "t1", sourceAccountId: "acc1", targetAccountId: "acc2", amount: 1000, amountType: "fixed", taxRate: 0 });
+    const t2 = makeTransfer({ id: "t2", sourceAccountId: "acc2", targetAccountId: "acc3", amount: 500, amountType: "fixed", taxRate: 0 });
+    const scenario = makeScenario({ accounts: [acc1, acc2, acc3], transfers: [t1, t2], timelineStart: "2024-01", timelineEnd: "2024-06" });
+    const result = runSimulation(scenario);
+    const totalInitial = 25000;
+    for (let i = 0; i < result.months.length; i++) {
+      const total =
+        (result.balances["acc1"][i] as number) +
+        (result.balances["acc2"][i] as number) +
+        (result.balances["acc3"][i] as number);
+      expect(total).toBeCloseTo(totalInitial, 5);
+    }
+  });
+});
+
+// ─── Section J: Gains-Only + Gains-Fraction Tax Basis ────────────────────────
+
+describe("J1: gains-only + gains-fraction produces less tax than gains-only + full basis", () => {
+  it("gains-fraction yields more to target than full basis for same transfer amount", () => {
+    const acc1gf = makeAccount({ id: "acc1", initialBalance: 10000, initialPrincipalRatio: 0.5, growthRate: 0 });
+    const acc2gf = makeAccount({ id: "acc2", initialBalance: 0, growthRate: 0 });
+    const tGainsFraction = makeTransfer({ id: "t1", sourceAccountId: "acc1", targetAccountId: "acc2", amountType: "gains-only", taxRate: 0.30, taxBasis: "gains-fraction", isOneTime: true });
+    const scenarioGF = makeScenario({ accounts: [acc1gf, acc2gf], transfers: [tGainsFraction] });
+    const resultGF = runSimulation(scenarioGF);
+
+    const acc1full = makeAccount({ id: "acc1", initialBalance: 10000, initialPrincipalRatio: 0.5, growthRate: 0 });
+    const acc2full = makeAccount({ id: "acc2", initialBalance: 0, growthRate: 0 });
+    const tFull = makeTransfer({ id: "t1", sourceAccountId: "acc1", targetAccountId: "acc2", amountType: "gains-only", taxRate: 0.30, taxBasis: "full", isOneTime: true });
+    const scenarioFull = makeScenario({ accounts: [acc1full, acc2full], transfers: [tFull] });
+    const resultFull = runSimulation(scenarioFull);
+
+    expect(resultGF.balances["acc2"][0]).toBeGreaterThan(resultFull.balances["acc2"][0] as number);
+  });
+});
+
+describe("J2: gains-only + gains-fraction exact expected values (clean 50/50 principal split)", () => {
+  it("taxCost is double-fraction: resolvedAmount × gainsRatio × taxRate = 750; netToTarget = 4250", () => {
+    // acc1: balance=10000, principal=5000, gains=5000
+    // resolvedAmount = 5000 (gains-only)
+    // gainsRatio = 5000/10000 = 0.5
+    // taxCost = 5000 × 0.5 × 0.30 = 750, netToTarget = 4250
+    // acc1 after: balance=5000, principal=5000-(5000×0.5)=2500
+    const acc1 = makeAccount({ id: "acc1", initialBalance: 10000, initialPrincipalRatio: 0.5, growthRate: 0 });
+    const acc2 = makeAccount({ id: "acc2", initialBalance: 0, growthRate: 0 });
+    const t1 = makeTransfer({ id: "t1", sourceAccountId: "acc1", targetAccountId: "acc2", amountType: "gains-only", taxRate: 0.30, taxBasis: "gains-fraction", isOneTime: true });
+    const scenario = makeScenario({ accounts: [acc1, acc2], transfers: [t1] });
+    const result = runSimulation(scenario);
+    expect(result.balances["acc2"][0]).toBeCloseTo(4250);
+    expect(result.balances["acc1"][0]).toBeCloseTo(5000);
+    expect(result.principals["acc1"][0]).toBeCloseTo(2500);
+  });
+});
+
+// ─── Section K: Account Processing Order Dependency ──────────────────────────
+
+describe("K1: correct order [A, B, C] — B receives credit from A before firing outgoing transfer", () => {
+  it("B passes on post-credit balance: C gets 50% of 7000 = 3500", () => {
+    const accA = makeAccount({ id: "acc1", initialBalance: 10000, growthRate: 0 });
+    const accB = makeAccount({ id: "acc2", initialBalance: 5000, growthRate: 0 });
+    const accC = makeAccount({ id: "acc3", initialBalance: 0, growthRate: 0 });
+    const t1 = makeTransfer({ id: "t1", sourceAccountId: "acc1", targetAccountId: "acc2", amount: 2000, amountType: "fixed", taxRate: 0, isOneTime: true });
+    const t2 = makeTransfer({ id: "t2", sourceAccountId: "acc2", targetAccountId: "acc3", amount: 0.50, amountType: "percent-balance", taxRate: 0, isOneTime: true });
+    const scenario = makeScenario({ accounts: [accA, accB, accC], transfers: [t1, t2] });
+    const result = runSimulation(scenario);
+    expect(result.balances["acc1"][0]).toBeCloseTo(8000);
+    expect(result.balances["acc2"][0]).toBeCloseTo(3500);
+    expect(result.balances["acc3"][0]).toBeCloseTo(3500);
+  });
+});
+
+describe("K2: reversed order [B, A, C] — B fires before receiving from A; C gets less", () => {
+  it("B passes on opening balance only: C gets 50% of 5000 = 2500", () => {
+    const accA = makeAccount({ id: "acc1", initialBalance: 10000, growthRate: 0 });
+    const accB = makeAccount({ id: "acc2", initialBalance: 5000, growthRate: 0 });
+    const accC = makeAccount({ id: "acc3", initialBalance: 0, growthRate: 0 });
+    const t1 = makeTransfer({ id: "t1", sourceAccountId: "acc1", targetAccountId: "acc2", amount: 2000, amountType: "fixed", taxRate: 0, isOneTime: true });
+    const t2 = makeTransfer({ id: "t2", sourceAccountId: "acc2", targetAccountId: "acc3", amount: 0.50, amountType: "percent-balance", taxRate: 0, isOneTime: true });
+    // B before A — B processes outgoing transfer before A's credit arrives
+    const scenario = makeScenario({ accounts: [accB, accA, accC], transfers: [t1, t2] });
+    const result = runSimulation(scenario);
+    expect(result.balances["acc1"][0]).toBeCloseTo(8000);
+    expect(result.balances["acc2"][0]).toBeCloseTo(4500);
+    expect(result.balances["acc3"][0]).toBeCloseTo(2500);
+  });
+});
+
+describe("K3: fixed-amount transfers are immune to account processing order", () => {
+  it("C receives exactly 1000 regardless of [A,B,C] or [B,A,C] order", () => {
+    const accA = makeAccount({ id: "acc1", initialBalance: 10000, growthRate: 0 });
+    const accB = makeAccount({ id: "acc2", initialBalance: 5000, growthRate: 0 });
+    const accC = makeAccount({ id: "acc3", initialBalance: 0, growthRate: 0 });
+    const t1 = makeTransfer({ id: "t1", sourceAccountId: "acc1", targetAccountId: "acc2", amount: 2000, amountType: "fixed", taxRate: 0, isOneTime: true });
+    const t2 = makeTransfer({ id: "t2", sourceAccountId: "acc2", targetAccountId: "acc3", amount: 1000, amountType: "fixed", taxRate: 0, isOneTime: true });
+    const scenarioABC = makeScenario({ accounts: [accA, accB, accC], transfers: [t1, t2] });
+    const resultABC = runSimulation(scenarioABC);
+    const scenarioBAC = makeScenario({ accounts: [accB, accA, accC], transfers: [t1, t2] });
+    const resultBAC = runSimulation(scenarioBAC);
+    expect(resultABC.balances["acc3"][0]).toBeCloseTo(1000);
+    expect(resultBAC.balances["acc3"][0]).toBeCloseTo(1000);
+  });
+});
+
+// ─── Section L: Phase 1 Contribution + Gains-Only Interaction ────────────────
+
+describe("L1: external contribution raises balance+principal equally; gains-only sees unchanged gains", () => {
+  it("after $3000 contribution, gains-only outgoing still withdraws the original 5000 gains", () => {
+    // acc1: balance=10000, principal=5000 (gains=5000), no growth
+    // T1 (Phase 1): null→acc1, $3000, taxRate=0 → balance=13000, principal=8000, gains=5000
+    // T2 (Phase 2): acc1→null, gains-only, taxRate=0 → withdraws 5000
+    // acc1 after: balance=8000, principal=8000-(5000×8000/13000)≈4923
+    const acc1 = makeAccount({ id: "acc1", initialBalance: 10000, initialPrincipalRatio: 0.5, growthRate: 0 });
+    const t1 = makeTransfer({ id: "t1", sourceAccountId: null, targetAccountId: "acc1", amount: 3000, amountType: "fixed", taxRate: 0, isOneTime: true });
+    const t2 = makeTransfer({ id: "t2", sourceAccountId: "acc1", targetAccountId: null, amountType: "gains-only", taxRate: 0, isOneTime: true });
+    const scenario = makeScenario({ accounts: [acc1], transfers: [t1, t2] });
+    const result = runSimulation(scenario);
+    expect(result.balances["acc1"][0]).toBeCloseTo(8000);
+    expect(result.principals["acc1"][0]).toBeCloseTo(8000 - 5000 * (8000 / 13000), 2);
+  });
+});
+
+describe("L2: taxed inbound contribution does not inflate gains", () => {
+  it("net contribution (after tax) credited to both balance and principal; gains-only sees same gains", () => {
+    // acc1: balance=10000, principal=5000. T1 external $4000 taxRate=0.25 → net=3000 → balance=13000, principal=8000
+    // gains = 13000-8000 = 5000 (unchanged from original 5000)
+    // T2 gains-only: withdraws 5000 → balance=8000
+    const acc1 = makeAccount({ id: "acc1", initialBalance: 10000, initialPrincipalRatio: 0.5, growthRate: 0 });
+    const t1 = makeTransfer({ id: "t1", sourceAccountId: null, targetAccountId: "acc1", amount: 4000, amountType: "fixed", taxRate: 0.25, taxBasis: "full", isOneTime: true });
+    const t2 = makeTransfer({ id: "t2", sourceAccountId: "acc1", targetAccountId: null, amountType: "gains-only", taxRate: 0, isOneTime: true });
+    const scenario = makeScenario({ accounts: [acc1], transfers: [t1, t2] });
+    const result = runSimulation(scenario);
+    expect(result.balances["acc1"][0]).toBeCloseTo(8000);
+  });
+});
+
+// ─── Section M: Growth on Negative Balance ───────────────────────────────────
+
+describe("M1: positive growth rate on negative balance makes debt grow larger", () => {
+  it("10% yearly growth on -10000 increases debt to -11000 at month 0; principal clamped at -10000", () => {
+    const acc1 = makeAccount({ id: "acc1", initialBalance: -10000, initialPrincipalRatio: 1, growthRate: 0.10, growthPeriod: "yearly" });
+    const scenario = makeScenario({ accounts: [acc1], timelineStart: "2024-01", timelineEnd: "2024-12" });
+    const result = runSimulation(scenario);
+    expect(result.balances["acc1"][0]).toBeCloseTo(-11000);
+    expect(result.principals["acc1"][0]).toBeCloseTo(-10000);
+  });
+});
+
+describe("M2: monthly growth on negative balance compounds debt each month", () => {
+  it("12% annual monthly growth on -5000 compounds to -5000 × 1.12^(3/12) by month index 2", () => {
+    const acc1 = makeAccount({ id: "acc1", initialBalance: -5000, initialPrincipalRatio: 1, growthRate: 0.12, growthPeriod: "monthly" });
+    const scenario = makeScenario({ accounts: [acc1], timelineStart: "2024-01", timelineEnd: "2024-12" });
+    const result = runSimulation(scenario);
+    const expected = -5000 * Math.pow(1.12, 3 / 12);
+    expect(result.balances["acc1"][2]).toBeCloseTo(expected, 2);
+    expect(result.principals["acc1"][2]).toBeCloseTo(-5000);
+  });
+});
+
+// ─── Section N: Percent-Balance Self-Transfer ─────────────────────────────────
+
+describe("N1: percent-balance self-transfer (non-gains-only): net balance loss equals taxCost only", () => {
+  it("20% self-transfer at 25% tax: debited 2000, credited 1500, net = -500", () => {
+    // acc1: balance=10000, principal=10000
+    // resolvedAmount = 20% × 10000 = 2000; taxCost = 500; netToTarget = 1500
+    // balance: 10000 - 2000 + 1500 = 9500
+    // principal: 10000 - 2000×(10000/10000) + 1500 = 9500
+    const acc1 = makeAccount({ id: "acc1", initialBalance: 10000, initialPrincipalRatio: 1, growthRate: 0 });
+    const t1 = makeTransfer({ id: "t1", sourceAccountId: "acc1", targetAccountId: "acc1", amount: 0.20, amountType: "percent-balance", taxRate: 0.25, taxBasis: "full", isOneTime: true });
+    const scenario = makeScenario({ accounts: [acc1], transfers: [t1] });
+    const result = runSimulation(scenario);
+    expect(result.balances["acc1"][0]).toBeCloseTo(9500);
+    expect(result.principals["acc1"][0]).toBeCloseTo(9500);
+  });
+});
+
+// ─── Section O: Principal Recovery After Overdraft ───────────────────────────
+
+describe("O1: principal recovery after overdraft — clamp restores correctly on return to positive", () => {
+  it("principal tracks balance correctly through negative and back to positive", () => {
+    // acc1: balance=500, principal=500, no growth
+    // i=0 (2024-01): withdraw $2000 → balance=-1500, principal clamped to -1500
+    // i=1 (2024-02): external $3000 → balance=1500, principal clamped to max(1500, 0) = 1500
+    const acc1 = makeAccount({ id: "acc1", initialBalance: 500, initialPrincipalRatio: 1, growthRate: 0 });
+    const t1 = makeTransfer({ id: "t1", sourceAccountId: "acc1", targetAccountId: null, amount: 2000, amountType: "fixed", taxRate: 0, isOneTime: true, startDate: "2024-01" });
+    const t2 = makeTransfer({ id: "t2", sourceAccountId: null, targetAccountId: "acc1", amount: 3000, amountType: "fixed", taxRate: 0, isOneTime: true, startDate: "2024-02" });
+    const scenario = makeScenario({ accounts: [acc1], transfers: [t1, t2], timelineStart: "2024-01", timelineEnd: "2024-06" });
+    const result = runSimulation(scenario);
+    expect(result.balances["acc1"][0]).toBeCloseTo(-1500);
+    expect(result.principals["acc1"][0]).toBeCloseTo(-1500);
+    expect(result.balances["acc1"][1]).toBeCloseTo(1500);
+    expect(result.principals["acc1"][1]).toBeCloseTo(1500);
+  });
+});

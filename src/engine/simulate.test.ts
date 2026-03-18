@@ -1060,6 +1060,25 @@ describe("A8: All accounts deflated independently by the same deflator", () => {
   });
 });
 
+describe("A1b: Percent-balance transfer operates on nominal balance; no inflation scaling applied", () => {
+  it("nominal balance drops by exactly transferRate each month regardless of inflation", () => {
+    // Percent-balance amount is computed on the nominal snapshot balance, then the result is
+    // deflated as a display transform. Consecutive displayed balances use *different* deflators,
+    // so display[i]/display[i-1] = 0.90 * (1+r)^(-1/12), not 0.90. The correct invariant is
+    // that the *nominal* ratio is exactly 0.90 — verified by recovering nominal values.
+    const acc = makeAccount({ id: "acc1", initialBalance: 10000, growthRate: 0 });
+    const t = makeTransfer({ amount: 0.10, amountType: "percent-balance", isOneTime: false, period: "monthly" });
+    const r = 0.05;
+    const scenario = makeScenario({ accounts: [acc], transfers: [t], inflationRate: r, inflationEnabled: true, timelineEnd: "2024-12" });
+    const result = runSimulation(scenario);
+    for (let i = 1; i < 12; i++) {
+      const nomCurr = (result.balances["acc1"][i] as number) * Math.pow(1 + r, i / 12);
+      const nomPrev = (result.balances["acc1"][i - 1] as number) * Math.pow(1 + r, (i - 1) / 12);
+      expect(nomCurr / nomPrev).toBeCloseTo(0.90, 6);
+    }
+  });
+});
+
 // ─── SECTION B: Growth Period Completeness ────────────────────────────────────
 
 describe("B1: Half-yearly growth fires at i=0 and i=6 with correct period rate", () => {

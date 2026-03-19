@@ -173,7 +173,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
         }
       });
     } else {
-      barData.forEach((d, i) => absIdxToX.set(d._absIdx, i * columnWidth));
+      barData.forEach((d, i) => absIdxToX.set(d._absIdx, Math.max(0, barLeft(i) - BAR_GAP / 2)));
     }
     layoutRef.current = {
       marginLeft: margin.left,

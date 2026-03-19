@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import type { Transfer, Account } from "../types";
 import { useScenarioStore } from "../store/scenario";
 import { CurrencyInput } from "./CurrencyInput";
+import { stepUp, stepDown } from "../utils/stepping";
 
 const PERIODS = ["monthly", "quarterly", "half-yearly", "yearly"] as const;
 const PERIOD_LABELS: Record<typeof PERIODS[number], string> = {
@@ -191,13 +192,17 @@ export function TransferEditor({ transfer, accounts }: Props) {
           {transfer.amountType === "percent-balance" ? (
             <PercentSlider value={transfer.amount} min={0} max={1} step={0.001} onChange={v => update("amount", v)} />
           ) : (
-            <CurrencyInput
-              value={transfer.amount}
-              locale={currencyLocale}
-              currencyCode={currencyCode}
-              onChange={v => update("amount", v)}
-              className="input"
-            />
+            <div className="flex items-center gap-2">
+              <button onClick={() => update("amount", Math.max(0, stepDown(transfer.amount)))} className="w-7 h-7 flex items-center justify-center rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 select-none text-sm font-medium transition-colors">−</button>
+              <CurrencyInput
+                value={transfer.amount}
+                locale={currencyLocale}
+                currencyCode={currencyCode}
+                onChange={v => update("amount", v)}
+                className="input flex-1"
+              />
+              <button onClick={() => update("amount", stepUp(transfer.amount))} className="w-7 h-7 flex items-center justify-center rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 select-none text-sm font-medium transition-colors">+</button>
+            </div>
           )}
         </Field>
       )}

@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import type { Account } from "../types";
 import { useScenarioStore } from "../store/scenario";
 import { CurrencyInput } from "./CurrencyInput";
+import { stepUp, stepDown } from "../utils/stepping";
 
 const PRESET_COLORS = [
   "#7c3aed", "#0891b2", "#059669", "#d97706",
@@ -102,13 +103,17 @@ export function AccountEditor({ account }: Props) {
       </Field>
 
       <Field label="Initial Balance">
-        <CurrencyInput
-          value={account.initialBalance}
-          locale={currencyLocale}
-          currencyCode={currencyCode}
-          onChange={v => update("initialBalance", v)}
-          className="input"
-        />
+        <div className="flex items-center gap-2">
+          <button onClick={() => update("initialBalance", stepDown(account.initialBalance))} className="w-7 h-7 flex items-center justify-center rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 select-none text-sm font-medium transition-colors">−</button>
+          <CurrencyInput
+            value={account.initialBalance}
+            locale={currencyLocale}
+            currencyCode={currencyCode}
+            onChange={v => update("initialBalance", v)}
+            className="input flex-1"
+          />
+          <button onClick={() => update("initialBalance", stepUp(account.initialBalance))} className="w-7 h-7 flex items-center justify-center rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 select-none text-sm font-medium transition-colors">+</button>
+        </div>
       </Field>
 
       <Field label={`Initial Principal/Gain Ratio — ${Math.round((account.initialPrincipalRatio ?? 1) * 100)}/${Math.round((1 - (account.initialPrincipalRatio ?? 1)) * 100)}%`}>

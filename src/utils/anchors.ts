@@ -14,6 +14,16 @@ export function addMonths(date: string, n: number): string {
   return `${ny}-${String(nm).padStart(2, "0")}`;
 }
 
+/** Anchor visual position for a transfer edge. Start edges sit at prevMonth(startDate). */
+export function edgeToAnchorDate(date: string, edge: EdgeId): string {
+  return edge === "start" ? addMonths(date, -1) : date;
+}
+
+/** Transfer date from an anchor position. Inverse of edgeToAnchorDate. */
+export function anchorToEdgeDate(anchorDate: string, edge: EdgeId): string {
+  return edge === "start" ? addMonths(anchorDate, 1) : anchorDate;
+}
+
 /** Returns the resolved date for an item's edge. */
 export function resolveEdgeDate(scenario: Scenario, itemId: string, edge: EdgeId): string {
   const acc = scenario.accounts.find(a => a.id === itemId);
@@ -75,8 +85,8 @@ export function findNearestEdge(
     if (item.type === "account") continue; // accounts have no snappable edges
     const edges: EdgeId[] = ["start", "end"];
     for (const edge of edges) {
-      const edgeDate = resolveEdgeDate(scenario, item.id, edge);
-      const dist = Math.abs(monthsBetween(candidateDate, edgeDate));
+      const anchorPos = edgeToAnchorDate(resolveEdgeDate(scenario, item.id, edge), edge);
+      const dist = Math.abs(monthsBetween(candidateDate, anchorPos));
       if (dist <= bestDist) {
         bestDist = dist;
         const existingAnchor = findAnchorForEdge(anchors, item.id, edge);
@@ -92,9 +102,10 @@ export function computeAnchorDragTarget(scenario: Scenario, anchor: TimeAnchor, 
   let result = candidateDate;
   for (const e of anchor.edges) {
     if (e.edge === "start") {
-      if (result < scenario.timelineStart) result = scenario.timelineStart;
+      // result is in anchor-date space (prevMonth of startDate)
+      if (result < addMonths(scenario.timelineStart, -1)) result = addMonths(scenario.timelineStart, -1);
       const t = scenario.transfers.find(t => t.id === e.itemId);
-      if (t?.endDate && result > t.endDate) result = t.endDate;
+      if (t?.endDate && result > addMonths(t.endDate, -1)) result = addMonths(t.endDate, -1);
     } else {
       if (result > scenario.timelineEnd) result = scenario.timelineEnd;
       const t = scenario.transfers.find(t => t.id === e.itemId);

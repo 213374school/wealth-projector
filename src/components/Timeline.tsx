@@ -13,6 +13,8 @@ import {
   monthsBetween,
   addMonths,
   getItemMinStart,
+  edgeToAnchorDate,
+  anchorToEdgeDate,
 } from "../utils/anchors";
 import { monthToLabel, formatCurrency } from "../utils/formatting";
 import { generateId } from "../utils/defaults";
@@ -172,10 +174,11 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           const t = scenario.transfers.find(t => t.id === edge.itemId);
           if (t) {
             if (edge.edge === "start") {
-              // Don't overwrite null startDate when dragging to the effective same position
+              // anchor is at prevMonth(startDate); invert to get actual startDate
+              const actualStartDate = addMonths(clamped, 1);
               const effectiveStart = t.startDate ?? scenario.timelineStart;
-              if (t.startDate !== null || clamped !== effectiveStart) {
-                transferUpdates.push({ id: edge.itemId, changes: { startDate: clamped } });
+              if (t.startDate !== null || actualStartDate !== effectiveStart) {
+                transferUpdates.push({ id: edge.itemId, changes: { startDate: actualStartDate } });
               }
             } else {
               transferUpdates.push({ id: edge.itemId, changes: { endDate: clamped } });
@@ -276,16 +279,22 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
         const thresholdMonths = (MAGNET_THRESHOLD_PX / containerWidth) * viewMonths;
         const myAnchor = findAnchorForEdge(anchors, id, draggedEdge);
-        const nearestAnchor = findNearestAnchor(anchors, candidateDate, myAnchor?.id ?? null, thresholdMonths);
-        const nearestEdge = findNearestEdge(anchors, scenario, candidateDate, id, lanes, thresholdMonths);
+        // Convert candidate to anchor-date space for correct distance comparisons
+        const candidateAnchorDate = edgeToAnchorDate(candidateDate, draggedEdge);
+        const nearestAnchor = findNearestAnchor(anchors, candidateAnchorDate, myAnchor?.id ?? null, thresholdMonths);
+        const nearestEdge = findNearestEdge(anchors, scenario, candidateAnchorDate, id, lanes, thresholdMonths);
 
-        // Anchor wins if both in range; compare distances
-        let anchorDist = nearestAnchor ? Math.abs(monthsBetween(candidateDate, nearestAnchor.date)) : Infinity;
-        let edgeDist = nearestEdge ? Math.abs(monthsBetween(candidateDate, resolveEdgeDate(scenario, nearestEdge.itemId, nearestEdge.edge))) : Infinity;
+        // Anchor wins if both in range; compare distances in anchor-date space
+        let anchorDist = nearestAnchor ? Math.abs(monthsBetween(candidateAnchorDate, nearestAnchor.date)) : Infinity;
+        let edgeDist = nearestEdge
+          ? Math.abs(monthsBetween(candidateAnchorDate,
+              edgeToAnchorDate(resolveEdgeDate(scenario, nearestEdge.itemId, nearestEdge.edge), nearestEdge.edge)))
+          : Infinity;
 
         if (nearestAnchor && anchorDist <= edgeDist) {
           dragTargetRef.current = { type: "anchor", anchor: nearestAnchor };
-          candidateDate = nearestAnchor.date;
+          // Convert anchor date back to transfer-date space
+          candidateDate = anchorToEdgeDate(nearestAnchor.date, draggedEdge);
           // Highlight anchor line
           const el = document.querySelector<HTMLElement>(`[data-anchor-id="${nearestAnchor.id}"] > div:first-child`);
           if (el) {
@@ -294,7 +303,8 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           }
         } else if (nearestEdge) {
           dragTargetRef.current = { type: "edge", itemId: nearestEdge.itemId, edge: nearestEdge.edge, existingAnchorId: nearestEdge.existingAnchorId };
-          candidateDate = resolveEdgeDate(scenario, nearestEdge.itemId, nearestEdge.edge);
+          const snapAnchorPos = edgeToAnchorDate(resolveEdgeDate(scenario, nearestEdge.itemId, nearestEdge.edge), nearestEdge.edge);
+          candidateDate = anchorToEdgeDate(snapAnchorPos, draggedEdge);
         }
 
         // --- Apply single-item update ---
@@ -325,12 +335,12 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           // At boundary — no anchor to create; store will detach the edge automatically
           ownAnchorUpdates = [];
         } else if (ownAnchor && !ownAnchor.fixed && ownAnchor.edges.length === 1) {
-          // Single-edge anchor: update in place
-          ownAnchorUpdates = [{ ...ownAnchor, date: clampedDate }];
+          // Single-edge anchor: update in place (anchor sits at edgeToAnchorDate position)
+          ownAnchorUpdates = [{ ...ownAnchor, date: edgeToAnchorDate(clampedDate, draggedEdge) }];
         } else if (hasDragged) {
           // Multi-edge or no anchor: create/update a temp single-edge anchor
           if (!tempAnchorIdRef.current) tempAnchorIdRef.current = generateId();
-          ownAnchorUpdates = [{ id: tempAnchorIdRef.current, date: clampedDate, edges: [{ itemId: id, edge: draggedEdge }] }];
+          ownAnchorUpdates = [{ id: tempAnchorIdRef.current, date: edgeToAnchorDate(clampedDate, draggedEdge), edges: [{ itemId: id, edge: draggedEdge }] }];
         } else {
           ownAnchorUpdates = [];
         }
@@ -391,10 +401,10 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
             // Don't update anchors for edges whose dates are being cleared — let detachNullDateEdges handle removal
             if ((edgeId === "start" && pendingChanges.startDate === null) ||
                 (edgeId === "end" && pendingChanges.endDate === null)) continue;
-            const newDate = edgeId === "start"
+            const newEdgeDate = edgeId === "start"
               ? addMonths(originalStart, delta)
-              : (originalEnd ? addMonths(originalEnd, delta) : anch.date);
-            anchorUpdates.push({ ...anch, date: newDate });
+              : (originalEnd ? addMonths(originalEnd, delta) : edgeToAnchorDate(anch.date, edgeId as EdgeId) /* fallback unchanged */);
+            anchorUpdates.push({ ...anch, date: edgeToAnchorDate(newEdgeDate, edgeId as EdgeId) });
           } else if (hasDragged) {
             for (const edge of anch.edges.filter(e => e.itemId === id)) {
               // Don't update anchors for edges whose dates are being cleared
@@ -403,10 +413,10 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
               if (!bodyTempAnchorsRef.current.has(edge.edge))
                 bodyTempAnchorsRef.current.set(edge.edge, generateId());
               const tempId = bodyTempAnchorsRef.current.get(edge.edge)!;
-              const newDate = edge.edge === "start"
+              const newEdgeDate = edge.edge === "start"
                 ? addMonths(originalStart, delta)
                 : (originalEnd ? addMonths(originalEnd, delta) : anch.date);
-              anchorUpdates.push({ id: tempId, date: newDate, edges: [{ itemId: id, edge: edge.edge }] });
+              anchorUpdates.push({ id: tempId, date: edgeToAnchorDate(newEdgeDate, edge.edge), edges: [{ itemId: id, edge: edge.edge }] });
             }
           }
         }
@@ -473,19 +483,20 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
               : lastClampedDate === scenario.timelineEnd;
             if (!atBoundary) anchorsToUpdate.push({
               id: generateId(),
-              date: lastClampedDate,
+              date: edgeToAnchorDate(lastClampedDate, draggedEdge),
               edges: [{ itemId: id, edge: draggedEdge }],
             });
           } else if (snap.type === "anchor") {
             if (tempAnchorId) anchorsToRemove.push(tempAnchorId);
             anchorsToUpdate.push(addEdgeToAnchor(snap.anchor, { itemId: id, edge: draggedEdge }));
           } else if (snap.existingAnchorId === null) {
-            // Create new anchor from two edges
+            // Create new anchor from two edges — anchor date is at snap edge's anchor position
             if (tempAnchorId) anchorsToRemove.push(tempAnchorId);
             const resolvedDate = resolveEdgeDate(scenario, snap.itemId, snap.edge);
+            const sharedAnchorDate = edgeToAnchorDate(resolvedDate, snap.edge);
             anchorsToUpdate.push({
               id: generateId(),
-              date: resolvedDate,
+              date: sharedAnchorDate,
               edges: [{ itemId: snap.itemId, edge: snap.edge }, { itemId: id, edge: draggedEdge }],
             });
           } else {
@@ -519,10 +530,10 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           // Spawn a new single-edge anchor for disconnected edges not already covered by a temp anchor
           for (const edge of disconnectedEdges) {
             if (bodyTempAnchorsRef.current.has(edge.edge)) continue; // temp anchor already in store
-            const newDate = edge.edge === "start"
+            const newEdgeDate = edge.edge === "start"
               ? addMonths(originalStart, lastBodyDelta)
               : (originalEnd ? addMonths(originalEnd, lastBodyDelta) : anchor.date);
-            anchorsToUpdate.push({ id: generateId(), date: newDate, edges: [{ itemId: id, edge: edge.edge }] });
+            anchorsToUpdate.push({ id: generateId(), date: edgeToAnchorDate(newEdgeDate, edge.edge), edges: [{ itemId: id, edge: edge.edge }] });
           }
         }
 
@@ -550,7 +561,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
     function xToDate(clientX: number): string {
       const pct = Math.max(0, Math.min(1, (clientX - containerLeft) / containerWidth));
-      const monthIdx = Math.round(pct * (viewMonths - 1)) + viewportStart;
+      const monthIdx = Math.min(viewMonths - 1, Math.floor(pct * viewMonths)) + viewportStart;
       return addMonths(scenario.timelineStart, monthIdx);
     }
 
@@ -559,10 +570,10 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
       return findNearestAnchor(anchors, date, null, thresholdMonths);
     }
 
-    // Snap start date at mousedown
+    // Snap start date at mousedown — search at prevMonth(rawStartDate) since start anchors sit there
     const rawStartDate = xToDate(e.clientX);
-    const startSnapAnchor = findSnapAnchor(rawStartDate);
-    const dragStartDate = startSnapAnchor ? startSnapAnchor.date : rawStartDate;
+    const startSnapAnchor = findSnapAnchor(addMonths(rawStartDate, -1));
+    const dragStartDate = startSnapAnchor ? addMonths(startSnapAnchor.date, 1) : rawStartDate;
     let snapStartAnchorId: string | null = startSnapAnchor?.id ?? null;
 
     const startX = e.clientX;
@@ -649,7 +660,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     const monthIdx = monthsBetween(scenario.timelineStart, todayStr);
     const viewIdx = monthIdx - viewportStart;
     if (viewIdx < 0 || viewIdx > viewMonths) return null;
-    return (viewIdx / (viewMonths - 1)) * 100;
+    return (viewIdx + 0.5) / viewMonths * 100;
   })();
 
   return (
@@ -669,8 +680,8 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         onMouseMove={e => {
           if (isDraggingAnchorRef.current) return;
           const rect = e.currentTarget.getBoundingClientRect();
-          const viewIdx = Math.round(((e.clientX - rect.left) / rect.width) * (viewMonths - 1));
-          onHoverIdx(Math.max(0, Math.min(viewMonths - 1, viewIdx)) + viewportStart);
+          const viewIdx = Math.min(viewMonths - 1, Math.floor(((e.clientX - rect.left) / rect.width) * viewMonths));
+          onHoverIdx(Math.max(0, viewIdx) + viewportStart);
         }}
         onMouseLeave={() => onHoverIdx(null)}
       >
@@ -683,7 +694,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         {hoveredIdx !== null && hoveredAnchorId === null && (() => {
           const viewIdx = hoveredIdx - viewportStart;
           if (viewIdx < 0 || viewIdx >= viewMonths) return null;
-          const pct = (viewIdx / (viewMonths - 1)) * 100;
+          const pct = (viewIdx + 0.5) / viewMonths * 100;
           return (
             <div
               className="absolute top-0 bottom-0 opacity-50 pointer-events-none z-10"
@@ -695,8 +706,8 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         {/* Anchor lines — rendered before bars so items appear on top */}
         {anchors.map(anchor => {
           const monthIdx = monthsBetween(scenario.timelineStart, anchor.date) - viewportStart;
-          if (monthIdx < 0 || monthIdx > viewMonths - 1) return null;
-          const pct = (monthIdx / (viewMonths - 1)) * 100;
+          if (monthIdx < -1 || monthIdx >= viewMonths) return null;
+          const pct = ((monthIdx + 1) / viewMonths) * 100;
           const isFixed = !!anchor.fixed;
           const isHovered = anchor.id === hoveredAnchorId;
           const lineColor = isHovered && !isFixed ? "var(--anchor-hover)" : "var(--anchor-line)";
@@ -752,8 +763,8 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           const top = lane * laneHeight + 2;
           const startIdx = Math.max(0, monthsBetween(scenario.timelineStart, startDate) - viewportStart);
           const endIdx = Math.min(viewMonths - 1, monthsBetween(scenario.timelineStart, endDate) - viewportStart);
-          const leftPct = (startIdx / (viewMonths - 1)) * 100;
-          const rightPct = (endIdx / (viewMonths - 1)) * 100;
+          const leftPct = (startIdx / viewMonths) * 100;
+          const rightPct = ((endIdx + 1) / viewMonths) * 100;
           const widthPct = rightPct - leftPct;
           const srcAcc = scenario.accounts.find(a => a.id === sourceAccountId);
           const srcColor = srcAcc?.color ?? "#6b7280";
@@ -779,8 +790,8 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           const rawStartIdx = monthsBetween(scenario.timelineStart, start) - viewportStart;
           const startIdx = Math.max(0, rawStartIdx);
           const endIdx = Math.min(viewMonths - 1, monthsBetween(scenario.timelineStart, end) - viewportStart);
-          const leftPct = (startIdx / (viewMonths - 1)) * 100;
-          const rightPct = (endIdx / (viewMonths - 1)) * 100;
+          const leftPct = (startIdx / viewMonths) * 100;
+          const rightPct = ((endIdx + 1) / viewMonths) * 100;
           const widthPct = rightPct - leftPct;
           const stuckRight = type === "transfer" && rawStartIdx > viewMonths - 1;
 

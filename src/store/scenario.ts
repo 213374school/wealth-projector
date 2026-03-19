@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { Scenario, Account, Transfer, TimeAnchor } from "../types";
 import { makeDefaultScenario, generateId, currentMonth } from "../utils/defaults";
 import { runSimulation } from "../engine/simulate";
-import { resolveEdgeDate } from "../utils/anchors";
+import { resolveEdgeDate, edgeToAnchorDate, addMonths } from "../utils/anchors";
 import type { SimulationResult } from "../types";
 
 interface HistorySnapshot {
@@ -127,21 +127,41 @@ function removeAnchorsForItem(anchors: TimeAnchor[] | undefined, itemId: string)
 
 /** Ensures every transfer edge (start, end) has at least one anchor. */
 function ensureSingleEdgeAnchors(scenario: Scenario): Scenario {
-  const anchors = scenario.anchors ?? [];
+  let anchors = scenario.anchors ?? [];
   const covered = new Set<string>();
   for (const a of anchors)
     for (const e of a.edges)
       covered.add(`${e.itemId}:${e.edge}`);
 
-  const newAnchors: TimeAnchor[] = [];
+  let changed = false;
   for (const t of scenario.transfers) {
-    if (t.startDate !== null && !covered.has(`${t.id}:start`))
-      newAnchors.push({ id: generateId(), date: t.startDate, edges: [{ itemId: t.id, edge: "start" }] });
-    if (t.endDate !== null && !covered.has(`${t.id}:end`))
-      newAnchors.push({ id: generateId(), date: t.endDate, edges: [{ itemId: t.id, edge: "end" }] });
+    if (t.startDate !== null && !covered.has(`${t.id}:start`)) {
+      const targetDate = addMonths(t.startDate, -1);
+      const existing = anchors.find(a => !a.fixed && a.date === targetDate);
+      if (existing) {
+        anchors = anchors.map(a => a.id === existing.id
+          ? { ...a, edges: [...a.edges, { itemId: t.id, edge: "start" as const }] }
+          : a);
+      } else {
+        anchors = [...anchors, { id: generateId(), date: targetDate, edges: [{ itemId: t.id, edge: "start" as const }] }];
+      }
+      changed = true;
+    }
+    if (t.endDate !== null && !covered.has(`${t.id}:end`)) {
+      const targetDate = t.endDate;
+      const existing = anchors.find(a => !a.fixed && a.date === targetDate);
+      if (existing) {
+        anchors = anchors.map(a => a.id === existing.id
+          ? { ...a, edges: [...a.edges, { itemId: t.id, edge: "end" as const }] }
+          : a);
+      } else {
+        anchors = [...anchors, { id: generateId(), date: targetDate, edges: [{ itemId: t.id, edge: "end" as const }] }];
+      }
+      changed = true;
+    }
   }
-  if (newAnchors.length === 0) return scenario;
-  return { ...scenario, anchors: [...anchors, ...newAnchors] };
+  if (!changed) return scenario;
+  return { ...scenario, anchors };
 }
 
 function syncAnchorDates(anchors: TimeAnchor[] | undefined, scenario: Scenario): TimeAnchor[] {
@@ -150,7 +170,8 @@ function syncAnchorDates(anchors: TimeAnchor[] | undefined, scenario: Scenario):
     const firstEdge = anchor.edges[0];
     if (!firstEdge) return anchor;
     const resolved = resolveEdgeDate(scenario, firstEdge.itemId, firstEdge.edge);
-    return resolved !== anchor.date ? { ...anchor, date: resolved } : anchor;
+    const expectedDate = edgeToAnchorDate(resolved, firstEdge.edge);
+    return expectedDate !== anchor.date ? { ...anchor, date: expectedDate } : anchor;
   });
 }
 
@@ -591,7 +612,9 @@ export const useScenarioStore = create<ScenarioStore>()(
               const migratedAnchors = (s.anchors ?? [])
                 .map(a => ({ ...a, edges: a.edges.filter(e => !accountIds.has(e.itemId)) }))
                 .filter(a => a.fixed || a.edges.length >= 1);
-              return [id, ensureSingleEdgeAnchors(ensureFixedAnchors({ ...s, anchors: migratedAnchors }))];
+              const base = ensureFixedAnchors({ ...s, anchors: migratedAnchors });
+              const synced = { ...base, anchors: syncAnchorDates(base.anchors, base) };
+              return [id, ensureSingleEdgeAnchors(synced)];
             })
           );
           state.simulationResult = recompute(state.scenarios, state.activeScenarioId);

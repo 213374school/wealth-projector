@@ -66,7 +66,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
     };
 
     // Decide bar granularity based on pixels per month
-    const pxPerMonth = width / Math.max(viewMonths - 1, 1);
+    const pxPerMonth = width / viewMonths;
     const barMode: "year" | "quarter" | "month" =
       pxPerMonth < 7.2 ? "year" : pxPerMonth < 21.5 ? "quarter" : "month";
 
@@ -122,17 +122,17 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       barLabels = months;
     }
 
-    // X scale — scalePoint matches the anchor strip formula (i * width/(n-1))
-    // Bars are centered on each point; a clipPath prevents edge bars bleeding into margins.
-    const xScale = d3.scalePoint<string>()
+    // X scale — scaleBand gives each bar its own column; no edge bars are clipped.
+    const columnWidth = barLabels.length > 0 ? width / barLabels.length : width;
+    const BAR_GAP = Math.min(8, Math.max(1.5, columnWidth * 0.06));
+    const xScale = d3.scaleBand<string>()
       .domain(barLabels)
       .range([0, width])
-      .padding(0);
-    const rawStep = barLabels.length > 1 ? xScale.step() : width;
-    const BAR_GAP = Math.min(8, Math.max(1.5, rawStep * 0.06));
-    const barWidth = Math.max(1, rawStep - BAR_GAP);
-    const barCenter = (i: number) => barLabels.length > 1 ? (xScale(barLabels[i]) ?? 0) : width / 2;
-    const barLeft = (i: number) => barCenter(i) - barWidth / 2;
+      .paddingOuter(0)
+      .paddingInner(BAR_GAP / columnWidth);
+    const barWidth = Math.max(1, xScale.bandwidth());
+    const barLeft = (i: number) => xScale(barLabels[i]) ?? 0;
+    const barCenter = (i: number) => (xScale(barLabels[i]) ?? 0) + barWidth / 2;
 
     // Compute Y domain
     let yMin = 0;
@@ -178,7 +178,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       marginLeft: margin.left,
       marginTop: margin.top,
       innerHeight: height,
-      step: rawStep,
+      step: columnWidth,
       absIdxToX,
     };
 
@@ -295,7 +295,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
     const MIN_PX = 35;
 
     if (barMode === "year") {
-      const pxPerBar = width / Math.max(barLabels.length - 1, 1);
+      const pxPerBar = columnWidth;
       if (pxPerBar >= MIN_PX) {
         tickValues = barLabels;
       } else if (pxPerBar * 5 >= MIN_PX) {
@@ -307,7 +307,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       }
       tickLabel = yr => yr;
     } else if (barMode === "quarter") {
-      const pxPerBar = width / Math.max(barLabels.length - 1, 1);
+      const pxPerBar = columnWidth;
       if (pxPerBar >= MIN_PX) {
         tickValues = barLabels;
       } else if (pxPerBar * 2 >= MIN_PX) {

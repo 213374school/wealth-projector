@@ -124,7 +124,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
 
     // X scale — scaleBand gives each bar its own column; no edge bars are clipped.
     const columnWidth = barLabels.length > 0 ? width / barLabels.length : width;
-    const BAR_GAP = Math.min(8, Math.max(1.5, columnWidth * 0.06));
+    const BAR_GAP = Math.min(40, Math.max(1.5, columnWidth * 0.15));
     const xScale = d3.scaleBand<string>()
       .domain(barLabels)
       .range([0, width])

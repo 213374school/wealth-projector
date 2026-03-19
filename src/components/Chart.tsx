@@ -157,7 +157,8 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       .range([height, 0]);
 
     // Store layout info for crosshair.
-    // Map every viewport month to its bar center so timeline hover highlights the right bar.
+    // Month mode: crosshair at left column boundary (between bars), matching the timeline.
+    // Year/quarter mode: crosshair centered in the aggregated bar.
     const absIdxToX = new Map<number, number>();
     if (barMode === "year") {
       barData.forEach((d, i) => {
@@ -172,7 +173,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
         }
       });
     } else {
-      barData.forEach((d, i) => absIdxToX.set(d._absIdx, barCenter(i)));
+      barData.forEach((d, i) => absIdxToX.set(d._absIdx, i * columnWidth));
     }
     layoutRef.current = {
       marginLeft: margin.left,

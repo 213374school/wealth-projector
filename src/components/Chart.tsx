@@ -255,11 +255,20 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
         .attr("fill-opacity", 1);
     }
 
-    // Net worth line (connecting bar centers)
-    const netLineData = barData.map((d, i) => ({
-      x: barCenter(i),
-      y: yScale(visibleAccList.reduce((sum, acc) => sum + ((d[acc.id] as number) || 0), 0)),
-    }));
+    // Net worth line (connecting bar end edges), with an initial point at the start of the first bar
+    const initialNetWorth = visibleAccList.reduce((sum, acc) => {
+      const absIdx = viewportStart === 0 ? 0 : viewportStart - 1;
+      const val = viewportStart === 0
+        ? acc.initialBalance
+        : (result.balances[acc.id]?.[viewportStart - 1] ?? 0);
+      return sum + deflate(val, absIdx);
+    }, 0);
+    const netLineData: { x: number; y: number }[] = barData.length > 0
+      ? [{ x: barLeft(0), y: yScale(initialNetWorth) }, ...barData.map((d, i) => ({
+          x: barLeft(i) + barWidth,
+          y: yScale(visibleAccList.reduce((sum, acc) => sum + ((d[acc.id] as number) || 0), 0)),
+        }))]
+      : [];
     g.append("path")
       .datum(netLineData)
       .attr("fill", "none")

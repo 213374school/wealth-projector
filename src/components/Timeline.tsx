@@ -694,7 +694,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         {hoveredIdx !== null && hoveredAnchorId === null && (() => {
           const viewIdx = hoveredIdx - viewportStart;
           if (viewIdx < 0 || viewIdx >= viewMonths) return null;
-          const pct = (viewIdx + 0.5) / viewMonths * 100;
+          const pct = (viewIdx / viewMonths) * 100;
           return (
             <div
               className="absolute top-0 bottom-0 opacity-50 pointer-events-none z-10"

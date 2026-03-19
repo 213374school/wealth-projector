@@ -417,15 +417,15 @@ export default function App() {
 
             const positioned = allAnchors.flatMap(anchor => {
               const monthIdx = monthsBetween(scenario.timelineStart, anchor.date) - safeViewportStart;
-              if (monthIdx < 0 || monthIdx > viewMonths - 1) return [];
-              return [{ anchor, pct: (monthIdx / (viewMonths - 1)) * 100 }];
+              if (monthIdx < -1 || monthIdx >= viewMonths) return [];
+              return [{ anchor, pct: ((monthIdx + 1) / viewMonths) * 100 }];
             });
 
             // Cursor label — only when not hovering over an existing anchor
             const cursorViewIdx = hoveredIdx !== null && hoveredAnchorId === null
               ? hoveredIdx - safeViewportStart : null;
             const cursorPct = cursorViewIdx !== null && cursorViewIdx >= 0 && cursorViewIdx <= viewMonths - 1
-              ? (cursorViewIdx / (viewMonths - 1)) * 100 : null;
+              ? (cursorViewIdx / viewMonths) * 100 : null;
             const cursorDate = cursorPct !== null ? addMonths(scenario.timelineStart, hoveredIdx!) : null;
 
             const MIN_LABEL_PX = 80;

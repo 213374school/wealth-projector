@@ -79,13 +79,19 @@ function ensureFixedAnchors(scenario: Scenario): Scenario {
   const startAnchor = anchors.find(a => a.id === FIXED_START_ID);
   const endAnchor = anchors.find(a => a.id === FIXED_END_ID);
 
-  if (startAnchor && startAnchor.date === scenario.timelineStart &&
+  // Fixed start anchor is stored one month before timelineStart, matching the
+  // start-edge convention (edgeToAnchorDate shifts start dates back by 1 month).
+  // This places the visual line at the left edge of the first month bar and
+  // makes the label display timelineStart correctly via addMonths(date, 1).
+  const fixedStartDate = addMonths(scenario.timelineStart, -1);
+
+  if (startAnchor && startAnchor.date === fixedStartDate &&
       endAnchor && endAnchor.date === scenario.timelineEnd) return scenario;
 
   if (!startAnchor) {
-    anchors = [{ id: FIXED_START_ID, date: scenario.timelineStart, edges: [], fixed: true }, ...anchors];
-  } else if (startAnchor.date !== scenario.timelineStart) {
-    anchors = anchors.map(a => a.id === FIXED_START_ID ? { ...a, date: scenario.timelineStart } : a);
+    anchors = [{ id: FIXED_START_ID, date: fixedStartDate, edges: [], fixed: true }, ...anchors];
+  } else if (startAnchor.date !== fixedStartDate) {
+    anchors = anchors.map(a => a.id === FIXED_START_ID ? { ...a, date: fixedStartDate } : a);
   }
   if (!endAnchor) {
     anchors = [...anchors, { id: FIXED_END_ID, date: scenario.timelineEnd, edges: [], fixed: true }];

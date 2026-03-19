@@ -61,7 +61,7 @@ export function makeDefaultScenario(): Scenario {
   const start = `${new Date().getFullYear()}-01`;
   return {
     id: generateId(),
-    name: "My FIRE Plan",
+    name: "My Wealth Plan",
     createdAt: now,
     updatedAt: now,
     timelineStart: start,

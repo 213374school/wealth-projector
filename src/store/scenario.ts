@@ -603,7 +603,7 @@ export const useScenarioStore = create<ScenarioStore>()(
       },
     }),
     {
-      name: "fire-tracker",
+      name: "wealth-projector",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         scenarios: state.scenarios,
@@ -611,6 +611,13 @@ export const useScenarioStore = create<ScenarioStore>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
+          if (Object.keys(state.scenarios).length === 0) {
+            const s = ensureFixedAnchors(makeDefaultScenario());
+            state.scenarios = { [s.id]: s };
+            state.activeScenarioId = s.id;
+            state.simulationResult = recompute(state.scenarios, s.id);
+            return;
+          }
           state.scenarios = Object.fromEntries(
             Object.entries(state.scenarios).map(([id, s]) => {
               // Migration: strip account edges from anchors (accounts are now omnipresent)

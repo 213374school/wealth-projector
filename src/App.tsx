@@ -327,7 +327,7 @@ export default function App() {
           <div className="w-7 h-7 rounded-md bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-sm shadow-orange-400/30 flex-shrink-0">
             <FlameIcon />
           </div>
-          <h1 className="font-semibold text-sm text-zinc-900 dark:text-zinc-100 tracking-tight">FIRE Planner</h1>
+          <h1 className="font-semibold text-sm text-zinc-900 dark:text-zinc-100 tracking-tight">Wealth Projector</h1>
           <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
           <span className="text-sm text-zinc-500 dark:text-zinc-400">{scenario.name}</span>
         </div>

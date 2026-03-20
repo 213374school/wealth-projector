@@ -135,6 +135,7 @@ export default function App() {
   const vpRef = useRef({ start: 0, end: 0, total: 1 });
   const panAccRef = useRef(0);
   const zoomWidthRef = useRef<number | null>(null);
+  const zoomStartRef = useRef<number | null>(null);
   const touchRef = useRef<{ x: number; y: number; dist: number | null } | null>(null);
 
   const scenario = activeScenarioId ? scenarios[activeScenarioId] : null;
@@ -212,23 +213,34 @@ export default function App() {
       const { start, end, total } = vpRef.current;
       const viewWidth = end - start;
       const containerWidth = el.clientWidth || 800;
+      // The chart data area is inset by p-2 (8px) padding + CHART_MARGIN.left/right
+      const chartPad = 8;
+      const chartInnerLeft = chartPad + CHART_MARGIN.left;
+      const chartInnerWidth = containerWidth - 2 * chartPad - CHART_MARGIN.left - CHART_MARGIN.right;
 
       if (e.ctrlKey || e.metaKey) {
-        if (zoomWidthRef.current === null) zoomWidthRef.current = viewWidth;
-        zoomWidthRef.current *= (1 + e.deltaY * 0.003);
-        zoomWidthRef.current = Math.max(12, Math.min(total - 1, zoomWidthRef.current));
-        const newWidth = Math.round(zoomWidthRef.current);
-        if (newWidth !== viewWidth) {
-          const rect = el.getBoundingClientRect();
-          const mouseRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / containerWidth));
-          const mouseMonth = start + mouseRatio * viewWidth;
-          const newStart = Math.round(mouseMonth - mouseRatio * newWidth);
-          applyViewport(newStart, newStart + newWidth);
+        // Track viewMonths (= viewWidth + 1) so mouseMonth is computed inclusively
+        if (zoomWidthRef.current === null) {
+          zoomWidthRef.current = viewWidth + 1;
+          zoomStartRef.current = start;
         }
+        const prevMonths = zoomWidthRef.current;
+        const prevStart = zoomStartRef.current!;
+        zoomWidthRef.current *= (1 + e.deltaY * 0.003);
+        zoomWidthRef.current = Math.max(12, Math.min(total, zoomWidthRef.current));
+        const newMonths = zoomWidthRef.current;
+        const newWidth = Math.round(newMonths) - 1;
+        const rect = el.getBoundingClientRect();
+        const mouseRatio = Math.max(0, Math.min(1, (e.clientX - rect.left - chartInnerLeft) / chartInnerWidth));
+        const mouseMonth = prevStart + mouseRatio * prevMonths;
+        zoomStartRef.current = mouseMonth - mouseRatio * newMonths;
+        const newStart = Math.round(zoomStartRef.current);
+        applyViewport(newStart, newStart + newWidth);
       } else {
         zoomWidthRef.current = null;
+        zoomStartRef.current = null;
         const rawDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-        panAccRef.current += (rawDelta / containerWidth) * viewWidth;
+        panAccRef.current += (rawDelta / chartInnerWidth) * viewWidth;
         const months = Math.trunc(panAccRef.current);
         if (months !== 0) {
           panAccRef.current -= months;
@@ -254,10 +266,13 @@ export default function App() {
       const { start, end, total } = vpRef.current;
       const viewWidth = end - start;
       const containerWidth = el.clientWidth || 800;
+      const chartPad = 8;
+      const chartInnerLeft = chartPad + CHART_MARGIN.left;
+      const chartInnerWidth = containerWidth - 2 * chartPad - CHART_MARGIN.left - CHART_MARGIN.right;
 
       if (e.touches.length === 1 && touchRef.current.dist === null) {
         const dx = e.touches[0].clientX - touchRef.current.x;
-        panAccRef.current += (-dx / containerWidth) * viewWidth;
+        panAccRef.current += (-dx / chartInnerWidth) * viewWidth;
         const months = Math.trunc(panAccRef.current);
         if (months !== 0) {
           panAccRef.current -= months;
@@ -270,12 +285,21 @@ export default function App() {
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const newDist = Math.hypot(dx, dy);
         const factor = touchRef.current.dist / newDist;
-        const newWidth = Math.max(12, Math.min(total - 1, Math.round(viewWidth * factor)));
+        if (zoomWidthRef.current === null) {
+          zoomWidthRef.current = viewWidth + 1;
+          zoomStartRef.current = start;
+        }
+        const prevMonths = zoomWidthRef.current;
+        const prevStart = zoomStartRef.current!;
+        zoomWidthRef.current = Math.max(12, Math.min(total, zoomWidthRef.current * factor));
+        const newMonths = zoomWidthRef.current;
+        const newWidth = Math.round(newMonths) - 1;
         const rect = el.getBoundingClientRect();
         const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-        const midRatio = Math.max(0, Math.min(1, (midX - rect.left) / containerWidth));
-        const midMonth = start + midRatio * viewWidth;
-        const newStart = Math.round(midMonth - midRatio * newWidth);
+        const midRatio = Math.max(0, Math.min(1, (midX - rect.left - chartInnerLeft) / chartInnerWidth));
+        const midMonth = prevStart + midRatio * prevMonths;
+        zoomStartRef.current = midMonth - midRatio * newMonths;
+        const newStart = Math.round(zoomStartRef.current);
         applyViewport(newStart, newStart + newWidth);
         touchRef.current.dist = newDist;
       }
@@ -284,8 +308,12 @@ export default function App() {
     const onTouchEnd = (e: TouchEvent) => {
       if (e.touches.length === 0) {
         touchRef.current = null;
+        zoomWidthRef.current = null;
+        zoomStartRef.current = null;
       } else if (e.touches.length === 1) {
         touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, dist: null };
+        zoomWidthRef.current = null;
+        zoomStartRef.current = null;
       }
       panAccRef.current = 0;
     };

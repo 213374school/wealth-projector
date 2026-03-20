@@ -136,7 +136,7 @@ export default function App() {
   const panAccRef = useRef(0);
   const zoomWidthRef = useRef<number | null>(null);
   const zoomStartRef = useRef<number | null>(null);
-  const touchRef = useRef<{ x: number; y: number; dist: number | null } | null>(null);
+  const activePointersRef = useRef(new Map<number, { x: number; y: number }>());
 
   const scenario = activeScenarioId ? scenarios[activeScenarioId] : null;
 
@@ -205,37 +205,49 @@ export default function App() {
     const el = chartAreaRef.current;
     if (!el) return;
 
+    // ── Shared geometry & zoom logic ─────────────────────────────────────────
+    const chartPad = 8;
+    const chartInnerLeft = chartPad + CHART_MARGIN.left;
+    const getChartInnerWidth = () =>
+      (el.clientWidth || 800) - 2 * chartPad - CHART_MARGIN.left - CHART_MARGIN.right;
+
+    const initZoom = () => {
+      if (zoomWidthRef.current === null) {
+        const { start, end } = vpRef.current;
+        zoomWidthRef.current = end - start + 1; // viewMonths, inclusive
+        zoomStartRef.current = start;
+      }
+    };
+
+    // Apply zoom anchored to a clientX position. Requires initZoom() called first.
+    const applyZoom = (clientX: number, newMonthsContinuous: number) => {
+      const { total } = vpRef.current;
+      const clamped = Math.max(12, Math.min(total, newMonthsContinuous));
+      const newWidth = Math.round(clamped) - 1;
+      const chartInnerWidth = getChartInnerWidth();
+      const rect = el.getBoundingClientRect();
+      const mouseRatio = Math.max(0, Math.min(1, (clientX - rect.left - chartInnerLeft) / chartInnerWidth));
+      const prevMonths = zoomWidthRef.current!;
+      const prevStart = zoomStartRef.current!;
+      const mouseMonth = prevStart + mouseRatio * prevMonths;
+      zoomStartRef.current = mouseMonth - mouseRatio * clamped;
+      zoomWidthRef.current = clamped;
+      applyViewport(Math.round(zoomStartRef.current), Math.round(zoomStartRef.current) + newWidth);
+    };
+
+    // ── Wheel (mouse scroll + Chrome/Firefox trackpad pinch) ─────────────────
     const onWheel = (e: WheelEvent) => {
       const inTimeline = timelineRef.current?.contains(e.target as Node);
       const isHorizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
       if (inTimeline && !isHorizontal && !e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      const { start, end, total } = vpRef.current;
+      const { start, end } = vpRef.current;
       const viewWidth = end - start;
-      const containerWidth = el.clientWidth || 800;
-      // The chart data area is inset by p-2 (8px) padding + CHART_MARGIN.left/right
-      const chartPad = 8;
-      const chartInnerLeft = chartPad + CHART_MARGIN.left;
-      const chartInnerWidth = containerWidth - 2 * chartPad - CHART_MARGIN.left - CHART_MARGIN.right;
+      const chartInnerWidth = getChartInnerWidth();
 
       if (e.ctrlKey || e.metaKey) {
-        // Track viewMonths (= viewWidth + 1) so mouseMonth is computed inclusively
-        if (zoomWidthRef.current === null) {
-          zoomWidthRef.current = viewWidth + 1;
-          zoomStartRef.current = start;
-        }
-        const prevMonths = zoomWidthRef.current;
-        const prevStart = zoomStartRef.current!;
-        zoomWidthRef.current *= (1 + e.deltaY * 0.003);
-        zoomWidthRef.current = Math.max(12, Math.min(total, zoomWidthRef.current));
-        const newMonths = zoomWidthRef.current;
-        const newWidth = Math.round(newMonths) - 1;
-        const rect = el.getBoundingClientRect();
-        const mouseRatio = Math.max(0, Math.min(1, (e.clientX - rect.left - chartInnerLeft) / chartInnerWidth));
-        const mouseMonth = prevStart + mouseRatio * prevMonths;
-        zoomStartRef.current = mouseMonth - mouseRatio * newMonths;
-        const newStart = Math.round(zoomStartRef.current);
-        applyViewport(newStart, newStart + newWidth);
+        initZoom();
+        applyZoom(e.clientX, zoomWidthRef.current! * (1 + e.deltaY * 0.003));
       } else {
         zoomWidthRef.current = null;
         zoomStartRef.current = null;
@@ -249,86 +261,104 @@ export default function App() {
       }
     };
 
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 1) {
-        touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, dist: null };
-      } else if (e.touches.length === 2) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        touchRef.current = { x: 0, y: 0, dist: Math.hypot(dx, dy) };
+    // ── Pointer events (touch screen pinch/pan) ───────────────────────────────
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      el.setPointerCapture(e.pointerId);
+      if (activePointersRef.current.size === 0) panAccRef.current = 0;
+      activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (activePointersRef.current.size < 2) {
+        zoomWidthRef.current = null;
+        zoomStartRef.current = null;
       }
-      panAccRef.current = 0;
     };
 
-    const onTouchMove = (e: TouchEvent) => {
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      if (!activePointersRef.current.has(e.pointerId)) return;
       e.preventDefault();
-      if (!touchRef.current) return;
-      const { start, end, total } = vpRef.current;
+      const { start, end } = vpRef.current;
       const viewWidth = end - start;
-      const containerWidth = el.clientWidth || 800;
-      const chartPad = 8;
-      const chartInnerLeft = chartPad + CHART_MARGIN.left;
-      const chartInnerWidth = containerWidth - 2 * chartPad - CHART_MARGIN.left - CHART_MARGIN.right;
+      const chartInnerWidth = getChartInnerWidth();
 
-      if (e.touches.length === 1 && touchRef.current.dist === null) {
-        const dx = e.touches[0].clientX - touchRef.current.x;
+      if (activePointersRef.current.size === 1) {
+        const prev = activePointersRef.current.get(e.pointerId)!;
+        const dx = e.clientX - prev.x;
+        activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
         panAccRef.current += (-dx / chartInnerWidth) * viewWidth;
         const months = Math.trunc(panAccRef.current);
         if (months !== 0) {
           panAccRef.current -= months;
           applyViewport(start + months, end + months);
         }
-        touchRef.current.x = e.touches[0].clientX;
-        touchRef.current.y = e.touches[0].clientY;
-      } else if (e.touches.length === 2 && touchRef.current.dist !== null) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const newDist = Math.hypot(dx, dy);
-        const factor = touchRef.current.dist / newDist;
-        if (zoomWidthRef.current === null) {
-          zoomWidthRef.current = viewWidth + 1;
-          zoomStartRef.current = start;
+      } else if (activePointersRef.current.size >= 2) {
+        const pts = Array.from(activePointersRef.current.values());
+        const prevDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        const newPts = Array.from(activePointersRef.current.values());
+        const newDist = Math.hypot(newPts[0].x - newPts[1].x, newPts[0].y - newPts[1].y);
+        const midX = (newPts[0].x + newPts[1].x) / 2;
+        if (prevDist > 0) {
+          initZoom();
+          applyZoom(midX, zoomWidthRef.current! * (prevDist / newDist));
         }
-        const prevMonths = zoomWidthRef.current;
-        const prevStart = zoomStartRef.current!;
-        zoomWidthRef.current = Math.max(12, Math.min(total, zoomWidthRef.current * factor));
-        const newMonths = zoomWidthRef.current;
-        const newWidth = Math.round(newMonths) - 1;
-        const rect = el.getBoundingClientRect();
-        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-        const midRatio = Math.max(0, Math.min(1, (midX - rect.left - chartInnerLeft) / chartInnerWidth));
-        const midMonth = prevStart + midRatio * prevMonths;
-        zoomStartRef.current = midMonth - midRatio * newMonths;
-        const newStart = Math.round(zoomStartRef.current);
-        applyViewport(newStart, newStart + newWidth);
-        touchRef.current.dist = newDist;
       }
     };
 
-    const onTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length === 0) {
-        touchRef.current = null;
-        zoomWidthRef.current = null;
-        zoomStartRef.current = null;
-      } else if (e.touches.length === 1) {
-        touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, dist: null };
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      activePointersRef.current.delete(e.pointerId);
+      if (activePointersRef.current.size < 2) {
         zoomWidthRef.current = null;
         zoomStartRef.current = null;
       }
-      panAccRef.current = 0;
+      if (activePointersRef.current.size === 0) panAccRef.current = 0;
+    };
+
+    // ── Safari trackpad pinch (gesturestart/change/end, WebKit-only) ──────────
+    // Safari fires gesture events on SVG elements instead of wheel+ctrlKey.
+    // e.scale is cumulative from gesturestart; convert to incremental factor.
+    let prevGestureScale = 1;
+
+    const onGestureStart = (e: Event) => {
+      e.preventDefault();
+      prevGestureScale = 1;
+      initZoom();
+    };
+
+    const onGestureChange = (e: Event) => {
+      e.preventDefault();
+      if (zoomWidthRef.current === null) return;
+      const ge = e as Event & { scale: number; clientX: number };
+      const factor = prevGestureScale / ge.scale; // scale↑ = zoom in = fewer months
+      prevGestureScale = ge.scale;
+      applyZoom(ge.clientX, zoomWidthRef.current * factor);
+    };
+
+    const onGestureEnd = (e: Event) => {
+      e.preventDefault();
+      prevGestureScale = 1;
+      zoomWidthRef.current = null;
+      zoomStartRef.current = null;
     };
 
     el.addEventListener("wheel", onWheel, { passive: false });
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", onTouchEnd, { passive: true });
-    el.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    el.addEventListener("pointerdown", onPointerDown);
+    el.addEventListener("pointermove", onPointerMove, { passive: false });
+    el.addEventListener("pointerup", onPointerUp);
+    el.addEventListener("pointercancel", onPointerUp);
+    el.addEventListener("gesturestart", onGestureStart, { passive: false });
+    el.addEventListener("gesturechange", onGestureChange, { passive: false });
+    el.addEventListener("gestureend", onGestureEnd, { passive: false });
     return () => {
       el.removeEventListener("wheel", onWheel);
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", onTouchEnd);
-      el.removeEventListener("touchcancel", onTouchEnd);
+      el.removeEventListener("pointerdown", onPointerDown);
+      el.removeEventListener("pointermove", onPointerMove);
+      el.removeEventListener("pointerup", onPointerUp);
+      el.removeEventListener("pointercancel", onPointerUp);
+      el.removeEventListener("gesturestart", onGestureStart);
+      el.removeEventListener("gesturechange", onGestureChange);
+      el.removeEventListener("gestureend", onGestureEnd);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -403,7 +433,7 @@ export default function App() {
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Chart + Timeline */}
-        <div ref={chartAreaRef} className="flex flex-col flex-1 overflow-hidden">
+        <div ref={chartAreaRef} className="flex flex-col flex-1 overflow-hidden" style={{ touchAction: "none" }}>
           {/* Legend */}
           <div className="px-4 py-2 flex-shrink-0 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center gap-3">
             <Legend

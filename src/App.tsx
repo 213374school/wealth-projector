@@ -585,6 +585,7 @@ export default function App() {
             <Timeline
               scenario={scenario}
               selectedItemId={selectedItemId}
+              selectedItemType={selectedItemType}
               viewportStart={safeViewportStart}
               viewportEnd={safeViewportEnd}
               onSelectItem={(id, type) => selectItem(id, type)}

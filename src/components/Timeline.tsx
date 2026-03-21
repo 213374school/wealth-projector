@@ -23,6 +23,7 @@ import type { EdgeId } from "../types";
 interface TimelineProps {
   scenario: Scenario;
   selectedItemId: string | null;
+  selectedItemType: "account" | "transfer" | null;
   viewportStart: number;
   viewportEnd: number;
   onSelectItem: (id: string | null, type: "account" | "transfer" | null) => void;
@@ -36,7 +37,7 @@ type DragTarget =
   | { type: "anchor"; anchor: TimeAnchor }
   | { type: "edge"; itemId: string; edge: EdgeId; existingAnchorId: string | null };
 
-export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd, onSelectItem, hoveredIdx, onHoverIdx, hoveredAnchorId, onHoverAnchorId }: TimelineProps) {
+export function Timeline({ scenario, selectedItemId, selectedItemType, viewportStart, viewportEnd, onSelectItem, hoveredIdx, onHoverIdx, hoveredAnchorId, onHoverAnchorId }: TimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingAnchorRef = useRef(false);
   const applyDragUpdate = useScenarioStore(s => s.applyDragUpdate);
@@ -838,15 +839,17 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
           const transfer = scenario.transfers.find(t => t.id === id);
           const isOneTime = (transfer as Transfer | undefined)?.isOneTime ?? false;
 
+          const isTransfer = type === "transfer" && !!transfer;
+
           const isSelected = id === selectedItemId;
+          const isRelated = selectedItemType === "account" && isTransfer && transfer != null &&
+            (transfer.sourceAccountId === selectedItemId || transfer.targetAccountId === selectedItemId);
           const hasSelection = selectedItemId != null;
           const top = laneTopPx(lane) + 2;
 
 // For drag: only transfers are draggable
           const dragStart = transfer ? (transfer.startDate ?? scenario.timelineStart) : null;
           const dragEnd = transfer ? (transfer.endDate ?? scenario.timelineEnd) : null;
-
-          const isTransfer = type === "transfer" && !!transfer;
 
           let srcColor = "#6b7280";
           let tgtColor = "#6b7280";
@@ -876,7 +879,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
                 height: h,
                 overflow: "hidden",
                 zIndex: 2,
-                opacity: hasSelection && !isSelected ? 0.6 : 1,
+                opacity: hasSelection && !isSelected && !isRelated ? 0.6 : 1,
                 transition: "opacity 0.1s, top 150ms ease",
               }}
               onClick={e => { e.stopPropagation(); onSelectItem(id, type); }}

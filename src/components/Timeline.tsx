@@ -53,6 +53,9 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
   } | null>(null);
   const [hoveredTransfer, setHoveredTransfer] = useState<{ id: string; x: number; y: number } | null>(null);
   const tooltipDivRef = useRef<HTMLDivElement | null>(null);
+  const [activeCreateRow, setActiveCreateRow] = useState<string | null>(null);
+  const createRowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isCreatingRef = useRef(false);
   const simulationResult = useScenarioStore(s => s.simulationResult);
   const anchors = scenario.anchors ?? [];
 
@@ -121,7 +124,18 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
   const h = laneHeight - 4;         // bar height = 20px
   const arrowTip = h / 2;           // = 10px — width of the chevron point
   const minCompactWidth = (h + arrowTip * 2 + 8) / 2; // enough to show both color halves clearly
-  const barsHeight = (maxLane + 1) * laneHeight + 8;
+  // Compact create rows take only 6px; active ones take the full laneHeight
+  const createRowCompactH = 14;
+  const createRowLaneSet = new Map(createRows.map(cr => [cr.lane, `create-${cr.sourceAccountId ?? "external"}`]));
+  function laneTopPx(targetLane: number): number {
+    let px = 0;
+    for (let l = 0; l < targetLane; l++) {
+      const rowKey = createRowLaneSet.get(l);
+      px += rowKey ? (activeCreateRow === rowKey ? laneHeight : createRowCompactH) : laneHeight;
+    }
+    return px;
+  }
+  const barsHeight = laneTopPx(maxLane + 1) + 8;
 
   const handleAnchorDrag = useCallback((e: React.MouseEvent, anchor: TimeAnchor) => {
     e.stopPropagation();
@@ -596,6 +610,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
     }
 
     if (startSnapAnchor) highlightAnchor(startSnapAnchor);
+    isCreatingRef.current = true;
 
     const onMouseMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
@@ -625,6 +640,8 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
       window.removeEventListener("mouseup", onMouseUp);
       clearHighlight();
       setCreateDragPreview(null);
+      isCreatingRef.current = false;
+      setActiveCreateRow(null);
 
       if (!hasDragged) return;
 
@@ -675,7 +692,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
       {/* Bars */}
       <div
         className="relative"
-        style={{ height: barsHeight }}
+        style={{ height: barsHeight, transition: "height 150ms ease" }}
         onClick={() => onSelectItem(null, null)}
         onMouseMove={e => {
           if (isDraggingAnchorRef.current) return;
@@ -733,26 +750,48 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
         {/* Create rows — drag here to add a new transfer from that source */}
         {createRows.map(({ sourceAccountId, lane }) => {
-          const top = lane * laneHeight + 2;
+          const rowKey = `create-${sourceAccountId ?? "external"}`;
+          const isActive = activeCreateRow === rowKey;
+          const laneTop = laneTopPx(lane);
+          const compactH = 2;
+          const visualH = isActive ? h : compactH;
+          const visualTop = 2;
           const srcAcc = scenario.accounts.find(a => a.id === sourceAccountId);
           const rowColor = srcAcc?.color ?? "#6b7280";
           return (
             <div
-              key={`create-${sourceAccountId ?? "external"}`}
-              className="absolute group cursor-crosshair"
-              style={{ left: 0, right: 0, top, height: h, zIndex: 2 }}
-              onMouseDown={e => handleCreateDrag(e, sourceAccountId, lane)}
+              key={rowKey}
+              className={`absolute ${isActive ? "cursor-crosshair" : "cursor-default"}`}
+              style={{ left: 0, right: 0, top: laneTop, height: isActive ? laneHeight : createRowCompactH, zIndex: 2, transition: "height 150ms ease" }}
+              onMouseEnter={() => {
+                if (createRowTimerRef.current) clearTimeout(createRowTimerRef.current);
+                createRowTimerRef.current = setTimeout(() => setActiveCreateRow(rowKey), 100);
+              }}
+              onMouseLeave={() => {
+                if (createRowTimerRef.current) clearTimeout(createRowTimerRef.current);
+                if (!isCreatingRef.current) setActiveCreateRow(null);
+              }}
+              onMouseDown={isActive ? e => handleCreateDrag(e, sourceAccountId, lane) : undefined}
             >
+              {/* Visual bar — compact line or full bar */}
               <div
-                className="absolute inset-0 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none"
-                style={{ border: `1px dashed ${rowColor}60`, background: `${rowColor}0d` }}
+                className="absolute left-0 right-0 rounded pointer-events-none"
+                style={{
+                  top: visualTop,
+                  height: visualH,
+                  border: `1px dashed ${isActive ? `${rowColor}60` : `${rowColor}00`}`,
+                  background: isActive ? `${rowColor}0d` : "transparent",
+                  transition: "height 150ms ease, top 150ms ease, border-color 150ms ease, background 150ms ease",
+                }}
               />
-              <span
-                className="absolute inset-0 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none select-none"
-                style={{ color: `${rowColor}80`, fontSize: 10 }}
-              >
-                drag to add transfer
-              </span>
+              {isActive && (
+                <span
+                  className="absolute left-0 right-0 flex items-center justify-center pointer-events-none select-none"
+                  style={{ top: 2, height: h, color: `${rowColor}80`, fontSize: 10 }}
+                >
+                  drag to add transfer
+                </span>
+              )}
             </div>
           );
         })}
@@ -760,7 +799,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
         {/* Preview bar while drag-creating a new transfer */}
         {createDragPreview !== null && (() => {
           const { sourceAccountId, lane, startDate, endDate } = createDragPreview;
-          const top = lane * laneHeight + 2;
+          const top = laneTopPx(lane) + 2;
           const startIdx = Math.max(0, monthsBetween(scenario.timelineStart, startDate) - viewportStart);
           const endIdx = Math.min(viewMonths - 1, monthsBetween(scenario.timelineStart, endDate) - viewportStart);
           const leftPct = (startIdx / viewMonths) * 100;
@@ -801,7 +840,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
 
           const isSelected = id === selectedItemId;
           const hasSelection = selectedItemId != null;
-          const top = lane * laneHeight + 2;
+          const top = laneTopPx(lane) + 2;
 
 // For drag: only transfers are draggable
           const dragStart = transfer ? (transfer.startDate ?? scenario.timelineStart) : null;
@@ -838,7 +877,7 @@ export function Timeline({ scenario, selectedItemId, viewportStart, viewportEnd,
                 overflow: "hidden",
                 zIndex: 2,
                 opacity: hasSelection && !isSelected ? 0.6 : 1,
-                transition: "opacity 0.1s",
+                transition: "opacity 0.1s, top 150ms ease",
               }}
               onClick={e => { e.stopPropagation(); onSelectItem(id, type); }}
               onMouseDown={dragStart !== null ? e => handleDrag(e, id, type, "body", dragStart, dragEnd) : undefined}

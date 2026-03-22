@@ -992,7 +992,39 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
               }}
             >
               {!isTransfer && (
-                <div style={{ position: "absolute", inset: 0, background: srcColor, pointerEvents: "none" }} />
+                <>
+                  <div style={{ position: "absolute", inset: 0, background: srcColor, pointerEvents: "none" }} />
+                  {simulationResult && (() => {
+                    const balances = simulationResult.balances[id];
+                    if (!balances) return null;
+                    const barMonths = endIdx - startIdx + 1;
+                    const runs: { from: number; to: number }[] = [];
+                    let runStart: number | null = null;
+                    for (let v = startIdx; v <= endIdx; v++) {
+                      const bal = balances[viewportStart + v];
+                      if (bal !== null && bal !== undefined && bal < 0) {
+                        if (runStart === null) runStart = v;
+                      } else {
+                        if (runStart !== null) { runs.push({ from: runStart, to: v - 1 }); runStart = null; }
+                      }
+                    }
+                    if (runStart !== null) runs.push({ from: runStart, to: endIdx });
+                    return runs.map(({ from, to }) => (
+                      <div
+                        key={from}
+                        style={{
+                          position: "absolute",
+                          top: 0, bottom: 0,
+                          left: `${((from - startIdx) / barMonths) * 100}%`,
+                          width: `${((to - from + 1) / barMonths) * 100}%`,
+                          backgroundImage: "linear-gradient(-45deg, transparent 25%, var(--timeline-bg) 25%, var(--timeline-bg) 50%, transparent 50%, transparent 75%, var(--timeline-bg) 75%)",
+                          backgroundSize: "8px 8px",
+                          pointerEvents: "none",
+                        }}
+                      />
+                    ));
+                  })()}
+                </>
               )}
               {isTransfer && (
                 <>

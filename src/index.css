@@ -8,6 +8,7 @@
   }
 
   :root {
+    --timeline-bg: #ffffff;
     --none-label: rgba(20,20,20,0.75);
     --none-stripe-a: rgba(160,165,175,0.38);
     --none-stripe-b: rgba(160,165,175,0.20);
@@ -17,6 +18,7 @@
     --anchor-hover: rgba(51,65,85,0.9);
   }
   .dark {
+    --timeline-bg: #18181b;
     --none-label: rgba(255,255,255,0.85);
     --none-stripe-a: rgba(107,114,128,0.52);
     --none-stripe-b: rgba(107,114,128,0.34);

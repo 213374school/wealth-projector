@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useState } from "react";
 import * as d3 from "d3";
 import type { SimulationResult } from "../types";
 import type { Account, Scenario } from "../types";
@@ -38,6 +38,19 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
     onLeave: () => void;
     onClick: (x: number, y: number) => void;
   } | null>(null);
+
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+
+  useEffect(() => {
+    if (!svgRef.current) return;
+    const container = svgRef.current.parentElement!;
+    const ro = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      setContainerSize({ width, height });
+    });
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []);
 
   const visibleMonths = useMemo(
     () => result.months.slice(viewportStart, viewportEnd + 1),
@@ -471,7 +484,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       },
     };
 
-  }, [result, accounts, visibleAccounts, viewportStart, viewportEnd, scenario, onHoverIdx, selectedItemId, onSelectItem, showRealValues]);
+  }, [result, accounts, visibleAccounts, viewportStart, viewportEnd, scenario, onHoverIdx, selectedItemId, onSelectItem, showRealValues, containerSize]);
 
   // visibleMonths is used to trigger re-render when viewport changes
   void visibleMonths;

@@ -469,7 +469,7 @@ export default function App() {
           </div>
 
           {/* Chart */}
-          <div className="flex-1 min-h-0 p-2">
+          <div className="flex-1 p-2" style={{ minHeight: 200 }}>
             <Chart
               result={simulationResult}
               accounts={scenario.accounts}
@@ -582,8 +582,8 @@ export default function App() {
           {/* Timeline */}
           <div
             ref={timelineRef}
-            className="flex-shrink-0 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2"
-            style={{ minHeight: 80, maxHeight: "35vh", overflowY: "auto", paddingLeft: CHART_MARGIN.left + 8, paddingRight: CHART_MARGIN.right + 8 }}
+            className="border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2"
+            style={{ minHeight: 80, overflowY: "auto", paddingLeft: CHART_MARGIN.left + 8, paddingRight: CHART_MARGIN.right + 8 }}
           >
             <Timeline
               scenario={scenario}

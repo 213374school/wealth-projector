@@ -1017,8 +1017,8 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
                           top: 0, bottom: 0,
                           left: `${((from - startIdx) / barMonths) * 100}%`,
                           width: `${((to - from + 1) / barMonths) * 100}%`,
-                          backgroundImage: "linear-gradient(-45deg, transparent 25%, var(--timeline-bg) 25%, var(--timeline-bg) 50%, transparent 50%, transparent 75%, var(--timeline-bg) 75%)",
-                          backgroundSize: "8px 8px",
+                          backgroundImage: "linear-gradient(to right, transparent 50%, var(--timeline-bg) 50%)",
+                          backgroundSize: "4px 100%",
                           pointerEvents: "none",
                         }}
                       />

@@ -1,4 +1,4 @@
-import type { Account, Transfer, Scenario } from "../types";
+import type { Account, Transfer, Scenario, TimeAnchor } from "../types";
 
 export function generateId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -58,19 +58,131 @@ export function makeDefaultTransfer(sourceId: string | null, targetId: string | 
 
 export function makeDefaultScenario(): Scenario {
   const now = currentMonth();
-  const start = `${new Date().getFullYear()}-01`;
+  const year = new Date().getFullYear();
+  const start = `${year}-01`;
+  const midEnd = `${year + 24}-12`;
+  const midStart = `${year + 25}-01`;
+  const end = `${year + 49}-12`;
+  const startAnchorDate = `${year - 1}-12`;
+
+  const cashId = generateId();
+  const investmentsId = generateId();
+  const salaryId = generateId();
+  const saveToInvestmentsId = generateId();
+  const drawFromInvestmentsId = generateId();
+  const midAnchorId = generateId();
+
+  const accounts: Account[] = [
+    {
+      id: cashId,
+      name: "Cash",
+      color: "#059669",
+      initialBalance: 150000,
+      initialPrincipalRatio: 1,
+      growthRate: 0.01,
+      growthPeriod: "yearly",
+    },
+    {
+      id: investmentsId,
+      name: "Investments",
+      color: "#0891b2",
+      initialBalance: 100000,
+      initialPrincipalRatio: 1,
+      growthRate: 0.07,
+      growthPeriod: "yearly",
+    },
+  ];
+
+  const transfers: Transfer[] = [
+    {
+      id: salaryId,
+      name: "Salary",
+      sourceAccountId: null,
+      targetAccountId: cashId,
+      startDate: null,
+      endDate: midEnd,
+      isOneTime: false,
+      amount: 10000,
+      amountType: "fixed",
+      period: "monthly",
+      taxRate: 0.25,
+      taxBasis: "full",
+      inflationAdjusted: true,
+    },
+    {
+      id: generateId(),
+      name: "Expenses",
+      sourceAccountId: cashId,
+      targetAccountId: null,
+      startDate: null,
+      endDate: null,
+      isOneTime: false,
+      amount: 6000,
+      amountType: "fixed",
+      period: "monthly",
+      taxRate: 0,
+      taxBasis: "full",
+      inflationAdjusted: true,
+    },
+    {
+      id: saveToInvestmentsId,
+      name: "Save to Investments",
+      sourceAccountId: cashId,
+      targetAccountId: investmentsId,
+      startDate: null,
+      endDate: midEnd,
+      isOneTime: false,
+      amount: 2400,
+      amountType: "fixed",
+      period: "monthly",
+      taxRate: 0,
+      taxBasis: "full",
+      inflationAdjusted: false,
+    },
+    {
+      id: drawFromInvestmentsId,
+      name: "Draw from Investments",
+      sourceAccountId: investmentsId,
+      targetAccountId: cashId,
+      startDate: midStart,
+      endDate: null,
+      isOneTime: false,
+      amount: 8500,
+      amountType: "fixed",
+      period: "monthly",
+      taxRate: 0.2,
+      taxBasis: "full",
+      inflationAdjusted: true,
+    },
+  ];
+
+  const anchors: TimeAnchor[] = [
+    { id: "__start__", date: startAnchorDate, edges: [], fixed: true },
+    { id: "__end__", date: end, edges: [], fixed: true },
+    {
+      id: midAnchorId,
+      date: midEnd,
+      edges: [
+        { itemId: salaryId, edge: "end" },
+        { itemId: saveToInvestmentsId, edge: "end" },
+        { itemId: drawFromInvestmentsId, edge: "start" },
+      ],
+    },
+  ];
+
   return {
     id: generateId(),
     name: "My Wealth Plan",
     createdAt: now,
     updatedAt: now,
     timelineStart: start,
-    timelineEnd: "2100-12",
+    timelineEnd: end,
     inflationRate: 0.02,
-    inflationEnabled: false,
+    inflationEnabled: true,
     currencyLocale: "en-US",
     currencySymbol: "$",
-    accounts: [],
-    transfers: [],
+    accounts,
+    transfers,
+    anchors,
   };
 }

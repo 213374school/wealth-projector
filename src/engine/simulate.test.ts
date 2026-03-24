@@ -458,7 +458,7 @@ describe("Scheduling: transfer never fires when startDate is after timelineEnd",
   it("balance unchanged for all 12 months when startDate is beyond timeline", () => {
     const acc = makeAccount({ id: "acc1", initialBalance: 10000, growthRate: 0 });
     const t = makeTransfer({ amount: 5000, isOneTime: true, startDate: "2025-06" });
-    const scenario = makeScenario({ accounts: [acc], timelineEnd: "2024-12" });
+    const scenario = makeScenario({ accounts: [acc], transfers: [t], timelineEnd: "2024-12" });
     const result = runSimulation(scenario);
     for (let i = 0; i < 12; i++) {
       expect(result.balances["acc1"][i]).toBeCloseTo(10000);

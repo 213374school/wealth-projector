@@ -1,18 +1,5 @@
 import type { Scenario, Account, Transfer, SimulationResult, Period } from "../types";
-
-function monthsBetween(start: string, end: string): number {
-  const [sy, sm] = start.split("-").map(Number);
-  const [ey, em] = end.split("-").map(Number);
-  return (ey - sy) * 12 + (em - sm);
-}
-
-function addMonths(date: string, n: number): string {
-  const [y, m] = date.split("-").map(Number);
-  const total = (y * 12 + (m - 1)) + n;
-  const ny = Math.floor(total / 12);
-  const nm = (total % 12) + 1;
-  return `${ny}-${String(nm).padStart(2, "0")}`;
-}
+import { monthsBetween, addMonths } from "../utils/anchors";
 
 function periodToMonths(p: Period): number {
   switch (p) {

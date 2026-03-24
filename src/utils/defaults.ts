@@ -1,4 +1,9 @@
-import type { Account, Transfer, Scenario, TimeAnchor } from "../types";
+import type { Scenario, TimeAnchor } from "../types";
+
+export const ACCOUNT_COLORS = [
+  "#4f46e5", "#0891b2", "#059669", "#d97706",
+  "#dc2626", "#7c3aed", "#db2777", "#0284c7",
+];
 
 export function generateId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -14,46 +19,6 @@ export function generateId(): string {
 export function currentMonth(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-const ACCOUNT_COLORS = [
-  "#4f46e5", "#0891b2", "#059669", "#d97706",
-  "#dc2626", "#7c3aed", "#db2777", "#0284c7",
-];
-
-let colorIndex = 0;
-export function nextColor(): string {
-  return ACCOUNT_COLORS[colorIndex++ % ACCOUNT_COLORS.length];
-}
-
-export function makeDefaultAccount(existingCount: number = 0): Account {
-  return {
-    id: generateId(),
-    name: `Account ${existingCount + 1}`,
-    color: ACCOUNT_COLORS[existingCount % ACCOUNT_COLORS.length],
-    initialBalance: 0,
-    initialPrincipalRatio: 1,
-    growthRate: 0.04,
-    growthPeriod: "yearly",
-  };
-}
-
-export function makeDefaultTransfer(sourceId: string | null, targetId: string | null): Transfer {
-  return {
-    id: generateId(),
-    name: "New Transfer",
-    sourceAccountId: sourceId,
-    targetAccountId: targetId,
-    startDate: currentMonth(),
-    endDate: null,
-    isOneTime: false,
-    amount: 1000,
-    amountType: "fixed",
-    period: "monthly",
-    taxRate: 0,
-    taxBasis: "full",
-    inflationAdjusted: false,
-  };
 }
 
 export function makeDefaultScenario(): Scenario {

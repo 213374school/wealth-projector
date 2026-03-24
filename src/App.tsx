@@ -147,8 +147,6 @@ export default function App() {
 
   const scenario = activeScenarioId ? scenarios[activeScenarioId] : null;
 
-  void selectedItemType;
-
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
@@ -179,6 +177,7 @@ export default function App() {
       }
       return next;
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scenario?.accounts]);
 
   useEffect(() => { vpRef.current.start = viewportStart; }, [viewportStart]);

@@ -4,26 +4,15 @@ import { useScenarioStore } from "../store/scenario";
 import { CurrencyInput } from "./CurrencyInput";
 import { StepButton } from "./StepButton";
 import { stepUp, stepDown } from "../utils/stepping";
-
-const PRESET_COLORS = [
-  "#7c3aed", "#0891b2", "#059669", "#d97706",
-  "#dc2626", "#4f46e5", "#db2777", "#0284c7",
-];
-
-const PERIODS = ["monthly", "quarterly", "half-yearly", "yearly"] as const;
-const PERIOD_LABELS: Record<typeof PERIODS[number], string> = {
-  "monthly": "Monthly",
-  "quarterly": "Quarterly",
-  "half-yearly": "Half-Yearly",
-  "yearly": "Yearly",
-};
+import { ACCOUNT_COLORS } from "../utils/defaults";
+import { PERIODS, PERIOD_LABELS, PercentSlider, Field } from "./EditorShared";
 
 interface Props {
   account: Account;
 }
 
 export function AccountEditor({ account }: Props) {
-  const isCustomColor = !PRESET_COLORS.includes(account.color);
+  const isCustomColor = !ACCOUNT_COLORS.includes(account.color);
   const [showCustom, setShowCustom] = useState(isCustomColor);
   const updateAccount = useScenarioStore(s => s.updateAccount);
   const deleteAccount = useScenarioStore(s => s.deleteAccount);
@@ -73,7 +62,7 @@ export function AccountEditor({ account }: Props) {
 
       <Field label="Color">
         <div className="flex flex-wrap gap-2 items-center">
-          {PRESET_COLORS.map(c => (
+          {ACCOUNT_COLORS.map(c => (
             <button
               key={c}
               onClick={() => { update("color", c); setShowCustom(false); }}
@@ -147,26 +136,6 @@ export function AccountEditor({ account }: Props) {
           className="input"
         />
       </Field>
-    </div>
-  );
-}
-
-function PercentSlider({ value, min, max, step, onChange }: { value: number; min: number; max: number; step: number; onChange: (v: number) => void }) {
-  const clamp = (v: number) => Math.max(min, Math.min(max, parseFloat(v.toFixed(4))));
-  return (
-    <div className="flex items-center gap-2">
-      <StepButton onClick={() => onChange(clamp(value - step))} className="w-7 h-7 flex items-center justify-center rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 select-none text-sm font-medium transition-colors">−</StepButton>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(parseFloat(e.target.value))} className="flex-1 accent-violet-600" />
-      <StepButton onClick={() => onChange(clamp(value + step))} className="w-7 h-7 flex items-center justify-center rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 select-none text-sm font-medium transition-colors">+</StepButton>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">{label}</label>
-      {children}
     </div>
   );
 }

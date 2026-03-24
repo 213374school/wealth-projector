@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Scenario, Account, Transfer, TimeAnchor } from "../types";
-import { makeDefaultScenario, generateId, currentMonth } from "../utils/defaults";
+import { makeDefaultScenario, generateId, currentMonth, ACCOUNT_COLORS } from "../utils/defaults";
 import { runSimulation } from "../engine/simulate";
 import { resolveEdgeDate, edgeToAnchorDate, addMonths } from "../utils/anchors";
 import type { SimulationResult } from "../types";
@@ -315,11 +315,10 @@ export const useScenarioStore = create<ScenarioStore>()(
           if (!state.activeScenarioId) return state;
           const scenario = state.scenarios[state.activeScenarioId];
           const count = scenario.accounts.length;
-          const COLORS = ["#4f46e5", "#0891b2", "#059669", "#d97706", "#dc2626", "#7c3aed", "#db2777", "#0284c7"];
           const newAcc: Account = {
             id: generateId(),
             name: `Account ${count + 1}`,
-            color: COLORS[count % COLORS.length],
+            color: ACCOUNT_COLORS[count % ACCOUNT_COLORS.length],
             initialBalance: 10000,
             initialPrincipalRatio: 1,
             growthRate: 0.04,

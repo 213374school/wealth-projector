@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useScenarioStore } from "../store/scenario";
 import { validateScenario } from "../utils/validation";
 import { MonthPicker } from "./MonthPicker";
+import { Field } from "./EditorShared";
 import type { Scenario } from "../types";
 
 interface Props {
@@ -180,15 +181,6 @@ export function Settings({ onClose }: Props) {
         </div>
         {importError && <p className="text-red-500 text-xs">{importError}</p>}
       </div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">{label}</label>
-      {children}
     </div>
   );
 }

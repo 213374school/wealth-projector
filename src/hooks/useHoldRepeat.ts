@@ -1,11 +1,11 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 const HOLD_DELAY = 400;
 const HOLD_INTERVAL = 80;
 
 export function useHoldRepeat(action: () => void) {
   const actionRef = useRef(action);
-  actionRef.current = action;
+  useEffect(() => { actionRef.current = action; });
 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);

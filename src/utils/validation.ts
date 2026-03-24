@@ -1,5 +1,3 @@
-import type { Scenario } from "../types";
-
 export interface ValidationResult {
   valid: boolean;
   error?: string;
@@ -122,5 +120,3 @@ function isValidYYYYMM(s: string): boolean {
   return /^\d{4}-\d{2}$/.test(s);
 }
 
-// Suppress unused import warning - Scenario type is used in validateScenario's return context
-export type { Scenario };

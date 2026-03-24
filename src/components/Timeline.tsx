@@ -1,6 +1,6 @@
 import { useRef, useCallback, useState } from "react";
 import type { Transfer, Scenario, TimeAnchor } from "../types";
-import { useScenarioStore, FIXED_END_ID } from "../store/scenario";
+import { useScenarioStore } from "../store/scenario";
 import {
   findAnchorForEdge,
   findNearestAnchor,
@@ -63,9 +63,6 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingAnchorRef = useRef(false);
   const applyDragUpdate = useScenarioStore(s => s.applyDragUpdate);
-  const addAnchor = useScenarioStore(s => s.addAnchor);
-  const updateAnchor = useScenarioStore(s => s.updateAnchor);
-  const addTransferAt = useScenarioStore(s => s.addTransferAt);
   const captureHistorySnapshot = useScenarioStore(s => s.captureHistorySnapshot);
 
   const reorderAccount = useScenarioStore(s => s.reorderAccount);
@@ -261,7 +258,7 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
 
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
-  }, [viewMonths, scenario, applyDragUpdate, captureHistorySnapshot, anchors, onHoverIdx, onHoverAnchorId]);
+  }, [viewMonths, scenario, applyDragUpdate, captureHistorySnapshot, onHoverIdx]);
 
   const handleDrag = useCallback((
     e: React.MouseEvent,
@@ -335,8 +332,8 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
         const nearestEdge = findNearestEdge(anchors, scenario, candidateAnchorDate, id, lanes, thresholdMonths);
 
         // Anchor wins if both in range; compare distances in anchor-date space
-        let anchorDist = nearestAnchor ? Math.abs(monthsBetween(candidateAnchorDate, nearestAnchor.date)) : Infinity;
-        let edgeDist = nearestEdge
+        const anchorDist = nearestAnchor ? Math.abs(monthsBetween(candidateAnchorDate, nearestAnchor.date)) : Infinity;
+        const edgeDist = nearestEdge
           ? Math.abs(monthsBetween(candidateAnchorDate,
               edgeToAnchorDate(resolveEdgeDate(scenario, nearestEdge.itemId, nearestEdge.edge), nearestEdge.edge)))
           : Infinity;
@@ -595,7 +592,7 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
 
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
-  }, [viewMonths, scenario, applyDragUpdate, captureHistorySnapshot, addAnchor, updateAnchor, anchors, lanes]);
+  }, [viewMonths, scenario, applyDragUpdate, captureHistorySnapshot, onHoverAnchorId, lanes]);
 
   const handleCreateDrag = useCallback((
     e: React.MouseEvent,
@@ -624,7 +621,7 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
     const rawStartDate = xToDate(e.clientX);
     const startSnapAnchor = findSnapAnchor(addMonths(rawStartDate, -1));
     const dragStartDate = startSnapAnchor ? addMonths(startSnapAnchor.date, 1) : rawStartDate;
-    let snapStartAnchorId: string | null = startSnapAnchor?.id ?? null;
+    const snapStartAnchorId: string | null = startSnapAnchor?.id ?? null;
 
     const startX = e.clientX;
     let hasDragged = false;
@@ -830,7 +827,6 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
           const isFixed = !!anchor.fixed;
           const isHovered = anchor.id === hoveredAnchorId;
           const lineColor = isHovered && !isFixed ? "var(--anchor-hover)" : "var(--anchor-line)";
-          const labelColor = isHovered && !isFixed ? "var(--anchor-hover)" : "var(--anchor-label)";
           return (
             <div
               key={anchor.id}
@@ -1118,7 +1114,7 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
         })}
 
         {/* Row reorder drag handles — left gutter */}
-        {externalTransfersOrdered.map((t, idx) => {
+        {externalTransfersOrdered.map((t) => {
           const y = transferLaneY[t.id];
           if (y === undefined) return null;
           const handleKey = `tx-${t.id}`;
@@ -1167,7 +1163,7 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
             >
               <RowDragHandle />
             </div>,
-            ...accTransfers.map((t, txIdx) => {
+            ...accTransfers.map((t) => {
               const y = transferLaneY[t.id];
               if (y === undefined) return null;
               const handleKey = `tx-${t.id}`;

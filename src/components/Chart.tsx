@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
 import type { SimulationResult } from "../types";
 import type { Account, Scenario } from "../types";
@@ -52,10 +52,6 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
     return () => ro.disconnect();
   }, []);
 
-  const visibleMonths = useMemo(
-    () => result.months.slice(viewportStart, viewportEnd + 1),
-    [result.months, viewportStart, viewportEnd]
-  );
 
   useEffect(() => {
     if (!svgRef.current) return;
@@ -486,12 +482,12 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
 
   }, [result, accounts, visibleAccounts, viewportStart, viewportEnd, scenario, onHoverIdx, selectedItemId, onSelectItem, showRealValues, containerSize]);
 
-  // visibleMonths is used to trigger re-render when viewport changes
-  void visibleMonths;
-
+  // Read layout ref once per render for crosshair positioning (set by D3 effect, safe to read here)
+  // eslint-disable-next-line react-hooks/refs
+  const layout = layoutRef.current;
   const crosshairX = (() => {
-    if (hoveredIdx === null || hoveredAnchorId !== null || !layoutRef.current) return null;
-    const { marginLeft, absIdxToX } = layoutRef.current;
+    if (hoveredIdx === null || hoveredAnchorId !== null || !layout) return null;
+    const { marginLeft, absIdxToX } = layout;
     const cx = absIdxToX?.get(hoveredIdx);
     return cx !== undefined ? marginLeft + cx : null;
   })();
@@ -510,11 +506,11 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
       }}
     >
       <svg ref={svgRef} className="w-full h-full" style={{ pointerEvents: "none" }} />
-      {crosshairX !== null && (
+      {crosshairX !== null && layout !== null && (
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
           <line
             x1={crosshairX} x2={crosshairX}
-            y1={layoutRef.current!.marginTop} y2={layoutRef.current!.marginTop + layoutRef.current!.innerHeight}
+            y1={layout.marginTop} y2={layout.marginTop + layout.innerHeight}
             stroke="currentColor" strokeWidth={1} strokeDasharray="4,2" opacity={0.5}
           />
         </svg>

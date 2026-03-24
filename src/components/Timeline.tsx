@@ -1235,7 +1235,7 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
         const r = scenario.inflationRate;
         const inflationOn = scenario.inflationEnabled && r !== 0;
         const sym = scenario.currencySymbol;
-        const loc = scenario.currencyLocale;
+        const symPos = scenario.currencySymbolPosition;
         const deflator = inflationOn ? Math.pow(1 + r, hoveredIdx / 12) : 1;
         const balanceReal = inflationOn ? balance / deflator : balance;
 
@@ -1255,11 +1255,11 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
             <div className="text-gray-500 dark:text-gray-500 text-[10px] mb-1">{monthToLabel(monthStr)}</div>
             {inflationOn ? (
               <>
-                <div>Nominal: {formatCurrency(balance, loc, sym)}</div>
-                <div>Real: {formatCurrency(balanceReal, loc, sym)}</div>
+                <div>Nominal: {formatCurrency(balance, sym, symPos)}</div>
+                <div>Real: {formatCurrency(balanceReal, sym, symPos)}</div>
               </>
             ) : (
-              <div>{formatCurrency(balance, loc, sym)}</div>
+              <div>{formatCurrency(balance, sym, symPos)}</div>
             )}
           </div>
         );
@@ -1289,9 +1289,9 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
 
         const r = scenario.inflationRate;
         const inflationOn = scenario.inflationEnabled && r !== 0;
-        const notHedged = (t.inflationAdjusted ?? false) === true;
+        const growsWithInflation = (t.inflationAdjusted ?? false) === true;
         const sym = scenario.currencySymbol;
-        const loc = scenario.currencyLocale;
+        const symPos = scenario.currencySymbolPosition;
 
         let amountNominal: number | null = null;
         let amountReal: number | null = null;
@@ -1299,7 +1299,7 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
 
         if (t.amountType === "fixed") {
           const deflator = inflationOn ? Math.pow(1 + r, monthIdx / 12) : 1;
-          amountNominal = inflationOn && notHedged ? t.amount * deflator : t.amount;
+          amountNominal = inflationOn && growsWithInflation ? t.amount * deflator : t.amount;
           amountReal = inflationOn ? amountNominal / deflator : amountNominal;
         } else if (t.amountType === "percent-balance") {
           amountLabel = `${(t.amount * 100).toFixed(1)}% of balance`;
@@ -1310,10 +1310,10 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
         const lines: string[] = [];
         if (amountNominal !== null) {
           if (inflationOn) {
-            lines.push(`Nominal: ${formatCurrency(amountNominal, loc, sym)}`);
-            lines.push(`Real: ${formatCurrency(amountReal!, loc, sym)}`);
+            lines.push(`Nominal: ${formatCurrency(amountNominal, sym, symPos)}`);
+            lines.push(`Real: ${formatCurrency(amountReal!, sym, symPos)}`);
           } else {
-            lines.push(formatCurrency(amountNominal, loc, sym));
+            lines.push(formatCurrency(amountNominal, sym, symPos));
           }
         } else {
           lines.push(amountLabel);
@@ -1336,7 +1336,7 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
             {lines.map((line, i) => <div key={i}>{line}</div>)}
             {inflationOn && t.amountType === "fixed" && (
               <div className="text-gray-400 dark:text-gray-500 text-[10px] mt-1">
-                {notHedged ? "grows with inflation" : "fixed nominal"}
+                {growsWithInflation ? "grows with inflation" : "fixed nominal"}
               </div>
             )}
           </div>

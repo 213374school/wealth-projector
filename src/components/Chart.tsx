@@ -388,7 +388,7 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
     // Y axis
     g.append("g").call(
       d3.axisLeft(yScale)
-        .tickFormat(d => formatCurrency(d as number, scenario.currencyLocale, scenario.currencySymbol))
+        .tickFormat(d => formatCurrency(d as number, scenario.currencySymbol, scenario.currencySymbolPosition))
     );
 
     // Helper: find closest bar index from mouse x position
@@ -428,10 +428,10 @@ export function Chart({ result, accounts, scenario, visibleAccounts, viewportSta
           html += `<div class="flex items-center gap-1">
             <span style="background:${colorMap[acc.id]}" class="inline-block w-2 h-2 rounded-full"></span>
             <span>${acc.name}:</span>
-            <span class="font-medium">${formatCurrency(v, scenario.currencyLocale, scenario.currencySymbol)}</span>
+            <span class="font-medium">${formatCurrency(v, scenario.currencySymbol, scenario.currencySymbolPosition)}</span>
           </div>`;
         }
-        html += `<div class="border-t mt-1 pt-1 font-semibold">Net: ${formatCurrency(total, scenario.currencyLocale, scenario.currencySymbol)}</div>`;
+        html += `<div class="border-t mt-1 pt-1 font-semibold">Net: ${formatCurrency(total, scenario.currencySymbol, scenario.currencySymbolPosition)}</div>`;
 
         tooltip.style("display", "block").html(html);
         const tW = tooltipRef.current?.offsetWidth ?? 200;

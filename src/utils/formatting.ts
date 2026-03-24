@@ -1,14 +1,15 @@
-export function formatCurrency(value: number, _locale: string, symbol: string): string {
+export function formatCurrency(value: number, symbol: string, symbolPosition: "before" | "after" = "before"): string {
   const abs = Math.abs(value);
-  let formatted: string;
+  const sign = value < 0 ? "-" : "";
+  let number: string;
   if (abs >= 1_000_000) {
-    formatted = `${symbol}${(value / 1_000_000).toFixed(2)}M`;
+    number = `${(abs / 1_000_000).toFixed(2)}M`;
   } else if (abs >= 1_000) {
-    formatted = `${symbol}${(value / 1_000).toFixed(1)}k`;
+    number = `${(abs / 1_000).toFixed(1)}k`;
   } else {
-    formatted = `${symbol}${value.toFixed(0)}`;
+    number = abs.toFixed(0);
   }
-  return formatted;
+  return symbolPosition === "after" ? `${sign}${number} ${symbol}` : `${sign}${symbol}${number}`;
 }
 
 export function monthToLabel(month: string): string {

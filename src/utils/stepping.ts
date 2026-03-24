@@ -1,5 +1,5 @@
 /** Returns the step size as 1/100 of the order-of-magnitude of the value. */
-export function getStep(value: number): number {
+function getStep(value: number): number {
   if (value === 0) return 1;
   const magnitude = Math.pow(10, Math.floor(Math.log10(Math.abs(value))));
   return magnitude / 100;

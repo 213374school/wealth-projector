@@ -140,6 +140,7 @@ export function makeDefaultScenario(): Scenario {
     name: "My Wealth Plan",
     createdAt: now,
     updatedAt: now,
+    schemaVersion: 1,
     timelineStart: start,
     timelineEnd: end,
     inflationRate: 0.02,

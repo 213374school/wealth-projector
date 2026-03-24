@@ -68,8 +68,9 @@ interface ScenarioStore {
   ) => void;
 }
 
-export const FIXED_START_ID = "__start__";
-export const FIXED_END_ID = "__end__";
+const FIXED_START_ID = "__start__";
+const FIXED_END_ID = "__end__";
+const CURRENT_SCHEMA_VERSION = 1;
 
 function recompute(scenarios: Record<string, Scenario>, activeId: string | null): SimulationResult | null {
   if (!activeId || !scenarios[activeId]) return null;
@@ -209,7 +210,6 @@ export const useScenarioStore = create<ScenarioStore>()(
       _redoStack: [],
       canUndo: false,
       canRedo: false,
-
 
       captureHistorySnapshot: () => {
         set(state => ({
@@ -664,12 +664,17 @@ export const useScenarioStore = create<ScenarioStore>()(
           }
           state.scenarios = Object.fromEntries(
             Object.entries(state.scenarios).map(([id, s]) => {
-              // Migration: strip account edges from anchors (accounts are now omnipresent)
-              const accountIds = new Set(s.accounts.map(a => a.id));
-              const migratedAnchors = (s.anchors ?? [])
-                .map(a => ({ ...a, edges: a.edges.filter(e => !accountIds.has(e.itemId)) }))
-                .filter(a => a.fixed || a.edges.length >= 1);
-              const base = ensureFixedAnchors({ ...s, anchors: migratedAnchors });
+              let migrated = s;
+              if ((migrated.schemaVersion ?? 0) < 1) {
+                // Migration v1: strip account edges from anchors (accounts are now omnipresent)
+                const accountIds = new Set(migrated.accounts.map(a => a.id));
+                const migratedAnchors = (migrated.anchors ?? [])
+                  .map(a => ({ ...a, edges: a.edges.filter(e => !accountIds.has(e.itemId)) }))
+                  .filter(a => a.fixed || a.edges.length >= 1);
+                migrated = { ...migrated, anchors: migratedAnchors };
+              }
+              migrated = { ...migrated, schemaVersion: CURRENT_SCHEMA_VERSION };
+              const base = ensureFixedAnchors(migrated);
               const synced = { ...base, anchors: syncAnchorDates(base.anchors, base) };
               return [id, ensureSingleEdgeAnchors(synced)];
             })

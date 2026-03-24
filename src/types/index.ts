@@ -46,6 +46,7 @@ export interface Scenario {
   name: string;
   createdAt: string;
   updatedAt: string;
+  schemaVersion?: number;
   timelineStart: string; // YYYY-MM
   timelineEnd: string;   // YYYY-MM
   inflationRate: number;

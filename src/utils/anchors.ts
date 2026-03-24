@@ -37,7 +37,7 @@ export function resolveEdgeDate(scenario: Scenario, itemId: string, edge: EdgeId
 }
 
 /** Returns minimum allowed start for a transfer (accounts are always omnipresent). */
-export function getItemMinStart(scenario: Scenario, _itemId: string): string {
+export function getItemMinStart(scenario: Scenario): string {
   return scenario.timelineStart;
 }
 
@@ -125,7 +125,7 @@ export function computeEdgeDragTargetSimple(
   edge: EdgeId,
   candidateDate: string,
 ): string {
-  const minStart = getItemMinStart(scenario, itemId);
+  const minStart = getItemMinStart(scenario);
   let result = candidateDate;
   if (edge === "start") {
     if (result < minStart) result = minStart;

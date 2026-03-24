@@ -285,7 +285,7 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
     }
 
     // Minimum start for this item
-    const itemMinStart = getItemMinStart(scenario, id);
+    const itemMinStart = getItemMinStart(scenario);
 
     // Track drag target for edge drag
     const dragTargetRef = { current: null as DragTarget | null };
@@ -781,13 +781,6 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
 
   return (
     <div ref={containerRef} className="relative w-full h-full select-none">
-      {/* Highlight styles */}
-      <style>{`
-        .anchor-candidate-highlight {
-          background: rgba(99,202,183,1) !important;
-          opacity: 1 !important;
-        }
-      `}</style>
       {/* Bars */}
       <div
         className="relative"

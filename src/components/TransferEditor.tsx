@@ -73,7 +73,7 @@ export function TransferEditor({ transfer, accounts }: Props) {
         {transfer.sourceAccountId === null ? (
           <div className="flex items-center gap-2">
             <span className="flex-1 text-sm text-zinc-400 dark:text-zinc-500">Income</span>
-            <button onClick={() => update("sourceAccountId", accounts[0]?.id ?? "")} className="text-xs text-violet-600 dark:text-violet-400 hover:underline whitespace-nowrap">Account</button>
+            {accounts.length > 0 && <button onClick={() => update("sourceAccountId", accounts[0].id)} className="text-xs text-violet-600 dark:text-violet-400 hover:underline whitespace-nowrap">Account</button>}
           </div>
         ) : (
           <div className="flex items-center gap-2">
@@ -93,7 +93,7 @@ export function TransferEditor({ transfer, accounts }: Props) {
         {transfer.targetAccountId === null ? (
           <div className="flex items-center gap-2">
             <span className="flex-1 text-sm text-zinc-400 dark:text-zinc-500">Consumption</span>
-            <button onClick={() => update("targetAccountId", accounts[0]?.id ?? "")} className="text-xs text-violet-600 dark:text-violet-400 hover:underline whitespace-nowrap">Account</button>
+            {accounts.length > 0 && <button onClick={() => update("targetAccountId", accounts[0].id)} className="text-xs text-violet-600 dark:text-violet-400 hover:underline whitespace-nowrap">Account</button>}
           </div>
         ) : (
           <div className="flex items-center gap-2">

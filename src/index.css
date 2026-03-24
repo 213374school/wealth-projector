@@ -57,4 +57,9 @@
            text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200
            transition-colors duration-150;
   }
+
+  .anchor-candidate-highlight {
+    background: rgba(99, 202, 183, 1) !important;
+    opacity: 1 !important;
+  }
 }

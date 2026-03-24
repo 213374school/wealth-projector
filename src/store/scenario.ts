@@ -267,6 +267,7 @@ export const useScenarioStore = create<ScenarioStore>()(
           updatedAt: currentMonth(),
           accounts: src.accounts.map(a => ({ ...a })),
           transfers: src.transfers.map(t => ({ ...t })),
+          anchors: (src.anchors ?? []).map(a => ({ ...a, edges: [...a.edges] })),
         });
         set(st => {
           const scenarios = { ...st.scenarios, [copy.id]: copy };

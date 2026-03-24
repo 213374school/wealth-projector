@@ -271,6 +271,7 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
     e.stopPropagation();
     const container = containerRef.current;
     if (!container) return;
+    captureHistorySnapshot();
     const containerWidth = container.clientWidth;
     const startX = e.clientX;
 
@@ -478,7 +479,6 @@ export function Timeline({ scenario, selectedItemId, selectedItemType, viewportS
       onHoverAnchorId(null);
 
       if (!hasDragged) return;
-      captureHistorySnapshot();
 
       if (part !== "body") {
         // Handle anchor connections on mouseup

@@ -41,9 +41,11 @@ Follow these steps every time you deploy:
 
 6. **Deploy to Cloudflare Pages**
    ```bash
-   CLOUDFLARE_API_TOKEN=<token> \
+   source .env.deploy && \
    CLOUDFLARE_ACCOUNT_ID=a1f070742e19af7f9bdaa29a9c92b667 \
    npx wrangler@3 pages deploy /tmp/pages-deploy \
      --project-name=wealth-projector \
      --branch=main
    ```
+
+   > Credentials are stored in `.env.deploy` (gitignored). Do not commit this file.

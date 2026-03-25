@@ -4,8 +4,7 @@ A browser-based financial planning tool for modelling long-term wealth trajector
 
 **Tech stack:** React 19 + Vite, D3.js, Zustand, Tailwind CSS, TypeScript, Vitest
 **Hosted at:** restinbed.com/wealth-projector
-**Deploy target:** `restinbed.com@linux284.unoeuro.com:~/public_html/wealth-projector/`
-**SSH key:** `~/.ssh/id_ed25519`
+**Deploy target:** Cloudflare Pages (project: `wealth-projector`, account: `a1f070742e19af7f9bdaa29a9c92b667`)
 
 ---
 
@@ -31,7 +30,20 @@ Follow these steps every time you deploy:
    npm run build
    ```
 
-5. **Deploy**
+5. **Assemble the deploy folder** — combine the landing page and the app:
    ```bash
-   rsync -av -e "ssh -i ~/.ssh/id_ed25519" dist/ restinbed.com@linux284.unoeuro.com:~/public_html/wealth-projector/
+   mkdir -p /tmp/pages-deploy/wealth-projector
+   cp /tmp/restinbed-index.html /tmp/pages-deploy/index.html
+   cp -r dist/* /tmp/pages-deploy/wealth-projector/
+   ```
+
+   > Note: the landing page lives at `/tmp/restinbed-index.html`. If it has been updated since the last deploy, make sure to re-upload it too.
+
+6. **Deploy to Cloudflare Pages**
+   ```bash
+   CLOUDFLARE_API_TOKEN=<token> \
+   CLOUDFLARE_ACCOUNT_ID=a1f070742e19af7f9bdaa29a9c92b667 \
+   npx wrangler@3 pages deploy /tmp/pages-deploy \
+     --project-name=wealth-projector \
+     --branch=main
    ```

@@ -63,4 +63,6 @@ export interface SimulationResult {
   months: string[];
   balances: Record<string, (number | null)[]>;
   principals: Record<string, (number | null)[]>;
+  inflows: number[];   // per-month sum of amounts entering from external (sourceAccountId === null)
+  outflows: number[];  // per-month sum of amounts leaving to external (targetAccountId === null), stored as positive values
 }

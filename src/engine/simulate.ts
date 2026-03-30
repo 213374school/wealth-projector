@@ -14,6 +14,27 @@ function periodRate(annualRate: number, n: number): number {
   return Math.pow(1 + annualRate, n / 12) - 1;
 }
 
+function resolveTransferAmount(
+  t: Transfer,
+  balance: Record<string, number>,
+  principal: Record<string, number>,
+  monthIndex: number,
+  scenario: Scenario
+): number {
+  const src = t.sourceAccountId;
+  const srcBal = src ? (balance[src] ?? 0) : 0;
+  const srcPrincipal = src ? (principal[src] ?? 0) : 0;
+  if (t.amountType === "fixed") {
+    if (scenario.inflationEnabled && scenario.inflationRate !== 0 && (t.inflationAdjusted ?? false))
+      return t.amount * Math.pow(1 + scenario.inflationRate, monthIndex / 12);
+    return t.amount;
+  } else if (t.amountType === "percent-balance") {
+    return Math.abs(srcBal) * t.amount;
+  } else {
+    return Math.max(0, srcBal - srcPrincipal);
+  }
+}
+
 function applyTransfer(
   t: Transfer,
   balance: Record<string, number>,
@@ -94,6 +115,8 @@ export function runSimulation(scenario: Scenario): SimulationResult {
   // Initialize balances and principals
   const balances: Record<string, (number | null)[]> = {};
   const principals: Record<string, (number | null)[]> = {};
+  const inflows: number[] = new Array(totalMonths).fill(0);
+  const outflows: number[] = new Array(totalMonths).fill(0);
 
   for (const acc of accounts) {
     balances[acc.id] = new Array(totalMonths).fill(null);
@@ -117,6 +140,7 @@ export function runSimulation(scenario: Scenario): SimulationResult {
     for (const t of transfers) {
       if (t.sourceAccountId !== null) continue;
       if (!isTransferActive(t, M, accounts, timelineStart)) continue;
+      inflows[i] += resolveTransferAmount(t, balance, principal, i, scenario);
       applyTransfer(t, balance, principal, i, scenario);
     }
 
@@ -137,6 +161,9 @@ export function runSimulation(scenario: Scenario): SimulationResult {
       for (const t of transfers) {
         if (t.sourceAccountId !== acc.id) continue;
         if (!isTransferActive(t, M, accounts, timelineStart)) continue;
+        if (t.targetAccountId === null) {
+          outflows[i] += resolveTransferAmount(t, balance, principal, i, scenario);
+        }
         applyTransfer(t, balance, principal, i, scenario);
       }
     }
@@ -151,7 +178,7 @@ export function runSimulation(scenario: Scenario): SimulationResult {
     }
   }
 
-  return { months, balances, principals };
+  return { months, balances, principals, inflows, outflows };
 }
 
 function isTransferActive(t: Transfer, M: string, accounts: Account[], timelineStart: string): boolean {

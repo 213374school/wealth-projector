@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useScenarioStore } from "./store/scenario";
 import { Chart, CHART_MARGIN } from "./components/Chart";
+import { CashFlowChart } from "./components/CashFlowChart";
 import { Timeline } from "./components/Timeline";
 import type { DragCreateInfo } from "./components/Timeline";
 import { EditorPanel } from "./components/EditorPanel";
@@ -128,6 +129,7 @@ export default function App() {
   const [theme, toggleTheme] = useTheme();
   const [showSettings, setShowSettings] = useState(false);
   const [showRealValues, setShowRealValues] = useState(true);
+  const [showCashFlow, setShowCashFlow] = useState(false);
   const [showAddTransfer, setShowAddTransfer] = useState(false);
   const [dragCreateInfo, setDragCreateInfo] = useState<DragCreateInfo | null>(null);
   const [visibleAccounts, setVisibleAccounts] = useState<Set<string>>(new Set());
@@ -456,8 +458,17 @@ export default function App() {
               visibleAccounts={visibleAccounts}
               onToggle={toggleAccountVisibility}
             />
+            <label className="flex items-center gap-1.5 ml-auto flex-shrink-0 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showCashFlow}
+                onChange={e => setShowCashFlow(e.target.checked)}
+                className="accent-violet-600"
+              />
+              Cash flow
+            </label>
             {scenario.inflationEnabled && scenario.inflationRate !== 0 && (
-              <div className="flex items-center ml-auto flex-shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs">
+              <div className="flex items-center flex-shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs">
                 <button
                   onClick={() => setShowRealValues(false)}
                   title="Nominal — values as actual future amounts, not adjusted for inflation"
@@ -475,7 +486,7 @@ export default function App() {
           {/* Chart */}
           <div
             ref={chartDivRef}
-            className={chartHeight == null ? "flex-1 p-2" : "flex-shrink-0 p-2"}
+            className={chartHeight == null ? "flex-1 px-2 pt-2" : "flex-shrink-0 px-2 pt-2"}
             style={{ minHeight: 300, ...(chartHeight != null ? { height: chartHeight } : {}) }}
           >
             <Chart
@@ -493,6 +504,19 @@ export default function App() {
               showRealValues={showRealValues}
             />
           </div>
+
+          {/* Cash Flow Chart */}
+          {showCashFlow && <div className="flex-shrink-0 px-2 pb-2" style={{ height: 110, marginTop: -16 }}>
+            <CashFlowChart
+              result={simulationResult}
+              scenario={scenario}
+              viewportStart={safeViewportStart}
+              viewportEnd={safeViewportEnd}
+              hoveredIdx={hoveredIdx}
+              onHoverIdx={setHoveredIdx}
+              showRealValues={showRealValues}
+            />
+          </div>}
 
           {/* Anchor labels strip — fixed below chart, aligned to chart x-axis */}
           {(() => {

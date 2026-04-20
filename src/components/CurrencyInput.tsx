@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { safeLocale } from "../utils/formatting";
 
 interface Props {
   value: number;
@@ -13,7 +14,7 @@ export function CurrencyInput({ value, locale, currencyCode, symbolPosition = "b
   const [focused, setFocused] = useState(false);
   const [raw, setRaw] = useState("");
 
-  const num = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value);
+  const num = new Intl.NumberFormat(safeLocale(locale), { maximumFractionDigits: 0 }).format(value);
   const formatted = symbolPosition === "after" ? `${num} ${currencyCode}` : `${currencyCode}${num}`;
 
   return (

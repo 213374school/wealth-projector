@@ -1,3 +1,12 @@
+export function safeLocale(locale: string | undefined, fallback = "en-US"): string {
+  try {
+    Intl.getCanonicalLocales(locale ?? "");
+    return locale || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function formatCurrency(value: number, symbol: string, symbolPosition: "before" | "after" = "before"): string {
   const abs = Math.abs(value);
   const sign = value < 0 ? "-" : "";
@@ -15,5 +24,5 @@ export function formatCurrency(value: number, symbol: string, symbolPosition: "b
 export function monthToLabel(month: string, locale = "en-US"): string {
   const [y, m] = month.split("-").map(Number);
   const date = new Date(y, m - 1, 1);
-  return date.toLocaleDateString(locale, { month: "short", year: "numeric" });
+  return date.toLocaleDateString(safeLocale(locale), { month: "short", year: "numeric" });
 }
